@@ -423,7 +423,7 @@ export MAKE AWK GENKSYMS INSTALLKERNEL PERL PYTHON UTS_MACHINE
 export HOSTCXX HOSTCXXFLAGS LDFLAGS_MODULE CHECK CHECKFLAGS
 
 export KBUILD_CPPFLAGS NOSTDINC_FLAGS LINUXINCLUDE OBJCOPYFLAGS LDFLAGS
-export KBUILD_CFLAGS CFLAGS_KERNEL CFLAGS_MODULE CFLAGS_GCOV
+export KBUILD_CFLAGS CFLAGS_KERNEL CFLAGS_MODULE CFLAGS_GCOV CFLAGS_KASAN
 export KBUILD_AFLAGS AFLAGS_KERNEL AFLAGS_MODULE
 export KBUILD_AFLAGS_MODULE KBUILD_CFLAGS_MODULE KBUILD_LDFLAGS_MODULE
 export KBUILD_AFLAGS_KERNEL KBUILD_CFLAGS_KERNEL
@@ -742,6 +742,31 @@ endif
 # We trigger additional mismatches with less inlining
 ifdef CONFIG_DEBUG_SECTION_MISMATCH
 KBUILD_CFLAGS += $(call cc-option, -fno-inline-functions-called-once)
+endif
+
+ifdef CONFIG_KASAN
+ifdef CONFIG_KASAN_INLINE
+	call_threshold := 10000
+else
+	call_threshold := 0
+endif
+
+CFLAGS_KASAN_MINIMAL := $(call cc-option, -fsanitize=kernel-address)
+
+CFLAGS_KASAN := $(call cc-option, -fsanitize=kernel-address \
+		-fasan-shadow-offset=$(CONFIG_KASAN_SHADOW_OFFSET) \
+		--param asan-instrumentation-with-call-threshold=$(call_threshold))
+
+ifeq ($(CFLAGS_KASAN_MINIMAL),)
+        $(warning Cannot use CONFIG_KASAN: \
+            -fsanitize=kernel-address is not supported by compiler)
+else
+    ifeq ($(CFLAGS_KASAN),)
+        $(warning CONFIG_KASAN: compiler does not support all options.\
+            Trying minimal configuration)
+        CFLAGS_KASAN := $(CFLAGS_KASAN_MINIMAL)
+    endif
+endif
 endif
 
 # arch Makefile may override CC so keep this after arch Makefile is included
