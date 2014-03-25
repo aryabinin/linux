@@ -1,0 +1,20 @@
+config HAVE_ARCH_KASAN
+	bool
+
+if HAVE_ARCH_KASAN
+
+config KASAN
+	bool "AddressSanitizer: dynamic memory error detector"
+	default n
+	help
+	  Enables AddressSanitizer - dynamic memory error detector,
+	  that finds out-of-bounds and use-after-free bugs.
+
+config KASAN_SANITIZE_ALL
+	bool "Instrument entire kernel"
+	depends on KASAN
+	default y
+	help
+	  This enables compiler intrumentation for entire kernel
+
+endif
