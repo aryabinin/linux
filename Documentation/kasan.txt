@@ -1,0 +1,222 @@
+Kernel address sanitizer
+================
+
+0. Overview
+===========
+
+Kernel address sanitizer (KASAN) is a dynamic memory error detector. It provides
+fast and comprehensive solution for finding use-after-free and out-of-bounds bugs.
+It also possible to find unitialized memory accesses, but it's not implemented yet.
+
+KASAN is better than all of CONFIG_DEBUG_PAGEALLOC/CONFIG_KMEMCHECK, because it:
+ - is based on compiler instrumentation (fast),
+ - detects OOB for both writes and reads,
+ - provides UAF detection,
+ - does prompt detection of bad memory accesses,
+ - prints informative reports.
+
+KASAN can be enabled with CONFIG_KASAN=y (the kernel should be built with a
+specific compiler, see the web page below), currently works only on x86/x86_64/arm,
+and supports only SLUB allocator.
+
+1. Usage
+=========
+
+Currently KASAN works only with SLUB. It is highly recommended to run KASAN with
+CONFIG_SLUB_DEBUG=y to increase probability of finding bugs and to get more info them,
+though it should work without it.
+If SLUB_DEBUG is enabled it's recommended to boot kernel with 'slub_debug=U',
+which enables user tracking (free and alloc). There is no need to enable redzoning
+since KASAN detects access to user tracking information making them act like redzones.
+
+1.1 Reports
+==========
+
+A typical buffer overflow report looks like this:
+
+AddressSanitizer: buffer overflow in kasan_memset+0x24/0x50 at addr 86b2e521
+=============================================================================
+BUG kmalloc-64 (Tainted: G    B       ): kasan error
+-----------------------------------------------------------------------------
+
+INFO: Allocated in kasan_do_bo_memset+0x34/0x7c age=0 cpu=0 pid=1
+	__slab_alloc.constprop.71+0x2b4/0x2ec
+	kmem_cache_alloc+0xe8/0x114
+	kasan_do_bo_memset+0x34/0x7c
+	kasan_tests_init+0x2c/0x44
+	do_one_initcall+0x168/0x1b4
+	kernel_init_freeable+0x2d0/0x3a8
+	kernel_init+0x20/0x12c
+	ret_from_fork+0x14/0x3c
+INFO: Freed in kasan_tests_init+0x24/0x44 age=1 cpu=0 pid=1
+	__slab_free+0x38/0x2f8
+	kasan_tests_init+0x24/0x44
+	do_one_initcall+0x168/0x1b4
+	kernel_init_freeable+0x2d0/0x3a8
+	kernel_init+0x20/0x12c
+	ret_from_fork+0x14/0x3c
+INFO: Slab 0x86fd15c0 objects=16 used=5 fp=0x86b2e600 flags=0x0080
+INFO: Object 0x86b2e500 @offset=1280 fp=0x86b2e200
+
+Bytes b4 86b2e4f0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+Object 86b2e500: 00 e2 b2 86 00 00 00 00 00 00 00 00 00 00 00 00  ................
+Object 86b2e510: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+Object 86b2e520: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+Object 86b2e530: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+Padding 86b2e5e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+Padding 86b2e5f0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  ................
+CPU: 0 PID: 1 Comm: swapper/0 Tainted: G    B        3.14.0+ #125
+[<8001951c>] (unwind_backtrace) from [<80014b68>] (show_stack+0x14/0x20)
+[<80014b68>] (show_stack) from [<806ecff4>] (dump_stack+0x8c/0xac)
+[<806ecff4>] (dump_stack) from [<80131d64>] (kasan_report_error+0x2f0/0x380)
+[<80131d64>] (kasan_report_error) from [<80131288>] (check_memory_region+0x17c/0x248)
+[<80131288>] (check_memory_region) from [<801314a0>] (kasan_memset+0x24/0x50)
+[<801314a0>] (kasan_memset) from [<80132338>] (kasan_do_bo_memset+0x60/0x7c)
+[<80132338>] (kasan_do_bo_memset) from [<80865b7c>] (kasan_tests_init+0x2c/0x44)
+[<80865b7c>] (kasan_tests_init) from [<80008b44>] (do_one_initcall+0x168/0x1b4)
+[<80008b44>] (do_one_initcall) from [<80850fe4>] (kernel_init_freeable+0x2d0/0x3a8)
+[<80850fe4>] (kernel_init_freeable) from [<806e6ec8>] (kernel_init+0x20/0x12c)
+[<806e6ec8>] (kernel_init) from [<8000ffb8>] (ret_from_fork+0x14/0x3c)
+Write of size 40 by thread T1:
+Memory state around the buggy address:
+ 86b2e280: fb ff ff ff fb ff ff ff fb ff ff ff fb ff ff ff
+ 86b2e300: 00 00 00 00 00 00 00 00 fc ff ff ff fc ff ff ff
+ 86b2e380: fc ff ff ff fc ff ff ff fc ff ff ff fc ff ff ff
+ 86b2e400: fb ff ff ff fb ff ff ff fb ff ff ff fb ff ff ff
+ 86b2e480: fb ff ff ff fb ff ff ff fb ff ff ff fb ff ff ff
+>86b2e500: 00 00 00 00 01 ff ff ff fc ff ff ff fc ff ff ff
+                       ^
+ 86b2e580: fc ff ff ff fc ff ff ff fc ff ff ff fc ff ff ff
+ 86b2e600: fd ff ff ff fd ff ff ff fd ff ff ff fd ff ff ff
+ 86b2e680: fd ff ff ff fd ff ff ff fd ff ff ff fd ff ff ff
+ 86b2e700: fd ff ff ff fd ff ff ff fd ff ff ff fd ff ff ff
+ 86b2e780: fd ff ff ff fd ff ff ff fd ff ff ff fd ff ff ff
+==================================================================
+
+In the last section the report shows memory state around the accessed address.
+Reading this part requires some more undestanding of how KASAN works.
+
+Each 8 bytes of memory can be marked as addressable, partially addressable,
+freed or they can be part of a redzone.
+If 8 bytes are marked as addressable that means that they belong to some
+allocated memory block and it is possible to read or modify any of these
+8 bytes. Addressable 8 bytes are marked by 0 in the report.
+When only the first N bytes out of 8 belong to an allocated memory block,
+the 8 bytes are partially addressable. These 8 bytes are indicated by 'N'.
+
+Makers of unaccessible  8 bytes could be found in mm/kasan/kasan.h header.
+
+In the report above the arrows point to the letter 'f', which means that the
+accessed address is marked as freed.
+
+
+2. Implementation details
+========================
+
+2.1. Shadow memory
+==================
+
+From a high level, our approach to memory error detection is similar to that
+of kmemcheck: use shadow memory to record whether each byte of memory is safe
+to access, and use instrumentation to check the shadow memory on each memory
+access.
+
+AddressSanitizer dedicates one-eighth of the low memory to its shadow
+memory and uses direct mapping with a scale and offset to translate a memory
+address to its corresponding shadow address.
+
+Here is function witch translate address to corresponding shadow address:
+
+unsigned long kasan_mem_to_shadow(unsigned long addr)
+{
+	return ((addr - PAGE_OFFSET) >> KASAN_SHADOW_SCALE_SHIFT) + KASAN_SHADOW_START;
+}
+
+where KASAN_SHADOW_SCALE_SHIFT = 3.
+
+The figure below shows the address space layout. The memory is split
+into two parts (low and high) which map to the corresponding shadow regions.
+Applying the shadow mapping to addresses in the shadow region gives us
+addresses in the Bad region.
+
+|--------|        |--------|
+| Memory |----    | Memory |
+|--------|    \   |--------|
+| Shadow |--   -->| Shadow |
+|--------|  \     |--------|
+|   Bad  |   ---->|  Bad   |
+|--------|  /     |--------|
+| Shadow |--   -->| Shadow |
+|--------|    /   |--------|
+| Memory |----    | Memory |
+|--------|        |--------|
+
+Each shadow byte corresponds to 8 bytes of the main memory. We use the
+following encoding for each shadow byte: 0 means that all 8 bytes of the
+corresponding memory region are addressable; k (1 <= k <= 7) means that
+the first k bytes are addressable, and other (8 - k) bytes are not;
+any negative value indicates that the entire 8-byte word is unaddressable.
+We use different negative values to distinguish between different kinds of
+unaddressable memory (redzones, freed memory) (see mm/kasan/kasan.h).
+
+Poisoning or unpoisoning a byte in the main memory means writing some special
+value into the corresponding shadow memory. This value indicates whether the
+byte is addressable or not.
+
+
+2.2. Instrumentation
+====================
+
+KASAN requires the kernel to be built with a specific compiler. The compiler
+adds memory address checking instructions before every memory access.
+Before each of the memory accesses of size 1, 2, 4, 8 or 16 GCC inserts a specific
+function calls (__kasan_read1, _kasan_write1, ..., __kasan_read16, __kasan_write16).
+
+These functions check if the accessed memory region is poisoned and print a
+report if yes.
+
+Since some functions (such as memset, memmove, memcpy) wich do memory accesses
+are written in assembly, compiler can't instrument them.
+Therefore we replace these functions with our own instrumented functions
+(kasan_memset, kasan_memcpy, kasan_memove).
+Even if these functions are written in C it's worth to use our instrumented
+functions for perfomance reasons. It's definitely faster to check whole
+accessed memory range at once, then do a lot of checks at each memory access.
+In some circumstances you may need to use the original functions,
+in such case insert #undef KASAN_HOOKS before includes.
+
+You may also need to disable instrumentation for some files.
+To disable instrumentation for specific files or directories, add a line
+similar to the following to the respective kernel Makefile:
+
+        For a single file (e.g. main.o):
+                KASAN_SANITIZE_main.o := n
+
+        For all files in one directory:
+                KASAN_SANITIZE := n
+
+
+
+2.3. Handling slub allocator
+=====================
+
+When a new slab is created the pages allocated for this slab are poisoned as
+KASAN_SLAB_REDZONE. Each time a slab is destroyed the allocated pages are
+unpoisoned.
+
+When a new object is allocated from a cache the object is unpoisoned and
+allocation metainfo (such as  is stored in the redzone (the redzone is still poisoned).
+Each time a user tries to free an object from a cache the object is poisoned
+as KASAN_KMALLOC_FREE.
+
+When a user asks for an N bytes object and the kmalloc cache of size K is used
+for the allocation the object is allocated and unpoisoned as described above.
+Then the last K - N bytes are poisoned as KASAN_KMALLOC_REDZONE.
+When a user tries to free an object allocated via kmalloc the whole slab object
+as poisoned including the last K - N bytes.
+
+When a new slab cache created, parameter size (passed to kmem_cache_create) stored
+in struct kmem_cache in alloc_size field. Later this information is used to
+unpoison first alloc_size bytes of new object created in this cache/
+
+The whole Bad region is poisoned as KASAN_SHADOW_GAP.
