@@ -1470,6 +1470,10 @@ struct task_struct {
 	gfp_t lockdep_reclaim_gfp;
 #endif
 
+#ifdef CONFIG_KASAN
+	int kasan_depth;
+#endif
+
 /* journalling filesystem info */
 	void *journal_info;
 
