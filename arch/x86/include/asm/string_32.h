@@ -321,6 +321,32 @@ void *__constant_c_and_count_memset(void *s, unsigned long pattern,
 	 : __memset_generic((s), (c), (count)))
 
 #define __HAVE_ARCH_MEMSET
+
+#if defined(CONFIG_KASAN) && defined(KASAN_HOOKS)
+
+/*
+ * Since some of the following functions (memset, memmove, memcpy)
+ * are written in assembly, compiler can't instrument memory accesses
+ * inside them.
+ *
+ * To solve this issue we replace these functions with our own instrumented
+ * functions (kasan_mem*)
+ *
+ * In rare circumstances you may need to use the original functions,
+ * in such case put #undef KASAN_HOOKS before includes.
+ */
+
+#undef memcpy
+void *kasan_memset(void *ptr, int val, size_t len);
+void *kasan_memcpy(void *dst, const void *src, size_t len);
+void *kasan_memmove(void *dst, const void *src, size_t len);
+
+#define memcpy(dst, src, len) kasan_memcpy((dst), (src), (len))
+#define memset(ptr, val, len) kasan_memset((ptr), (val), (len))
+#define memmove(dst, src, len) kasan_memmove((dst), (src), (len))
+
+#else /* CONFIG_KASAN && KASAN_HOOKS */
+
 #if (__GNUC__ >= 4)
 #define memset(s, c, count) __builtin_memset(s, c, count)
 #else
@@ -330,6 +356,8 @@ void *__constant_c_and_count_memset(void *s, unsigned long pattern,
 				 (count))				\
 	 : __memset((s), (c), (count)))
 #endif
+
+#endif /* CONFIG_KASAN && KASAN_HOOKS */
 
 /*
  * find the first occurrence of byte 'c', or 1 past the area if none
