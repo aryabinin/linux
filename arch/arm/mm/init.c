@@ -22,6 +22,7 @@
 #include <linux/memblock.h>
 #include <linux/dma-contiguous.h>
 #include <linux/sizes.h>
+#include <linux/kasan.h>
 
 #include <asm/cp15.h>
 #include <asm/mach-types.h>
@@ -323,6 +324,8 @@ void __init arm_memblock_init(const struct machine_desc *mdesc)
 	 * must come from DMA area inside low memory
 	 */
 	dma_contiguous_reserve(min(arm_dma_limit, arm_lowmem_limit));
+
+	kasan_alloc_shadow();
 
 	arm_memblock_steal_permitted = false;
 	memblock_dump_all();
