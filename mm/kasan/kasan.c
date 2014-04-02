@@ -178,6 +178,24 @@ void __init kasan_init_shadow(void)
 	}
 }
 
+void kasan_alloc_pages(struct page *page, unsigned int order)
+{
+	if (unlikely(!kasan_initialized))
+		return;
+
+	if (likely(page && !PageHighMem(page)))
+		unpoison_shadow(page_address(page), PAGE_SIZE << order);
+}
+
+void kasan_free_pages(struct page *page, unsigned int order)
+{
+	if (unlikely(!kasan_initialized))
+		return;
+
+	if (likely(!PageHighMem(page)))
+		poison_shadow(page_address(page), PAGE_SIZE << order, KASAN_FREE_PAGE);
+}
+
 void *kasan_memcpy(void *dst, const void *src, size_t len)
 {
 	if (unlikely(len == 0))
