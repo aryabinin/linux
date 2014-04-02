@@ -17,6 +17,9 @@ void kasan_disable_local(void);
 void kasan_alloc_shadow(void);
 void kasan_init_shadow(void);
 
+void kasan_alloc_pages(struct page *page, unsigned int order);
+void kasan_free_pages(struct page *page, unsigned int order);
+
 #else /* CONFIG_KASAN */
 
 static inline void unpoison_shadow(const void *address, size_t size) {}
@@ -27,6 +30,9 @@ static inline void kasan_disable_local(void) {}
 /* Reserves shadow memory. */
 static inline void kasan_init_shadow(void) {}
 static inline void kasan_alloc_shadow(void) {}
+
+static inline void kasan_alloc_pages(struct page *page, unsigned int order) {}
+static inline void kasan_free_pages(struct page *page, unsigned int order) {}
 
 #endif /* CONFIG_KASAN */
 
