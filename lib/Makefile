@@ -2,6 +2,9 @@
 # Makefile for some libs needed in the kernel.
 #
 
+#disable instrumentation of smp_processor_id.c to avoid recursion
+KASAN_SANITIZE_smp_processor_id.n := n
+
 ifdef CONFIG_FUNCTION_TRACER
 ORIG_CFLAGS := $(KBUILD_CFLAGS)
 KBUILD_CFLAGS = $(subst -pg,,$(ORIG_CFLAGS))
