@@ -147,6 +147,7 @@ do_kmem_cache_create(char *name, size_t object_size, size_t size, size_t align,
 	s->name = name;
 	s->object_size = object_size;
 	s->size = size;
+	kasan_set_alloc_size(s, object_size);
 	s->align = align;
 	s->ctor = ctor;
 
@@ -409,6 +410,7 @@ void __init create_boot_cache(struct kmem_cache *s, const char *name, size_t siz
 
 	s->name = name;
 	s->size = s->object_size = size;
+	kasan_set_alloc_size(s, size);
 	s->align = calculate_alignment(flags, ARCH_KMALLOC_MINALIGN, size);
 	err = __kmem_cache_create(s, flags);
 
