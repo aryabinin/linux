@@ -561,8 +561,10 @@ static void print_tracking(struct kmem_cache *s, void *object)
 	if (!(s->flags & SLAB_STORE_USER))
 		return;
 
+	kasan_disable_local();
 	print_track("Allocated", get_track(s, object, TRACK_ALLOC));
 	print_track("Freed", get_track(s, object, TRACK_FREE));
+	kasan_enable_local();
 }
 
 static void print_page_info(struct page *page)
@@ -605,6 +607,8 @@ static void print_trailer(struct kmem_cache *s, struct page *page, u8 *p)
 	unsigned int off;	/* Offset of last byte */
 	u8 *addr = page_address(page);
 
+	kasan_disable_local();
+
 	print_tracking(s, p);
 
 	print_page_info(page);
@@ -632,6 +636,8 @@ static void print_trailer(struct kmem_cache *s, struct page *page, u8 *p)
 	if (off != s->size)
 		/* Beginning of the filler is the free pointer */
 		print_section("Padding ", p + off, s->size - off);
+
+	kasan_enable_local();
 
 	dump_stack();
 }
@@ -1013,6 +1019,8 @@ static noinline int alloc_debug_processing(struct kmem_cache *s,
 					struct page *page,
 					void *object, unsigned long addr)
 {
+
+	kasan_disable_local();
 	if (!check_slab(s, page))
 		goto bad;
 
@@ -1029,6 +1037,7 @@ static noinline int alloc_debug_processing(struct kmem_cache *s,
 		set_track(s, object, TRACK_ALLOC, addr);
 	trace(s, page, object, 1);
 	init_object(s, object, SLUB_RED_ACTIVE);
+	kasan_enable_local();
 	return 1;
 
 bad:
@@ -1042,6 +1051,7 @@ bad:
 		page->inuse = page->objects;
 		page->freelist = NULL;
 	}
+	kasan_enable_local();
 	return 0;
 }
 
@@ -1053,6 +1063,7 @@ static noinline struct kmem_cache_node *free_debug_processing(
 
 	spin_lock_irqsave(&n->list_lock, *flags);
 	slab_lock(page);
+	kasan_disable_local();
 
 	if (!check_slab(s, page))
 		goto fail;
@@ -1089,6 +1100,7 @@ static noinline struct kmem_cache_node *free_debug_processing(
 	trace(s, page, object, 0);
 	init_object(s, object, SLUB_RED_INACTIVE);
 out:
+	kasan_enable_local();
 	slab_unlock(page);
 	/*
 	 * Keep node_lock to preserve integrity
@@ -1097,6 +1109,7 @@ out:
 	return n;
 
 fail:
+	kasan_enable_local();
 	slab_unlock(page);
 	spin_unlock_irqrestore(&n->list_lock, *flags);
 	slab_fix(s, "Object at 0x%p not freed", object);
@@ -1433,11 +1446,12 @@ static void __free_slab(struct kmem_cache *s, struct page *page)
 
 	if (kmem_cache_debug(s)) {
 		void *p;
-
+		kasan_disable_local();
 		slab_pad_check(s, page);
 		for_each_object(p, s, page_address(page),
 						page->objects)
 			check_object(s, page, p, SLUB_RED_INACTIVE);
+		kasan_enable_local();
 	}
 
 	kmemcheck_free_shadow(page, compound_order(page));
