@@ -353,7 +353,6 @@ void slab_err(struct kmem_cache *s, struct page *page,
 		const char *fmt, ...);
 void object_err(struct kmem_cache *s, struct page *page,
 		u8 *object, char *reason);
-
+size_t __ksize(const void *obj);
 
 #endif /* MM_SLAB_H */
-

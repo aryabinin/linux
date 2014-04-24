@@ -798,7 +798,7 @@ static __always_inline void *__do_krealloc(const void *p, size_t new_size,
 	size_t ks = 0;
 
 	if (p)
-		ks = ksize(p);
+		ks = __ksize(p);
 
 	if (ks >= new_size) {
 		kasan_krealloc((void *)p, new_size);
@@ -878,7 +878,7 @@ void kzfree(const void *p)
 
 	if (unlikely(ZERO_OR_NULL_PTR(mem)))
 		return;
-	ks = ksize(mem);
+	ks = __ksize(mem);
 	memset(mem, 0, ks);
 	kfree(mem);
 }
