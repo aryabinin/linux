@@ -68,6 +68,11 @@ struct kmem_cache {
 	int object_size;	/* The size of an object without meta data */
 	int offset;		/* Free pointer offset. */
 	int cpu_partial;	/* Number of per cpu partial objects to keep around */
+
+#ifdef CONFIG_KASAN
+	int alloc_size;		/* actual allocation size kmem_cache_create */
+#endif
+
 	struct kmem_cache_order_objects oo;
 
 	/* Allocation and freeing of slabs */

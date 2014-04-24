@@ -260,6 +260,16 @@ static inline void memcg_uncharge_slab(struct kmem_cache *s, int order)
 }
 #endif
 
+#ifdef CONFIG_KASAN
+static inline void kasan_set_alloc_size(struct kmem_cache *s, size_t size)
+{
+	s->alloc_size = size;
+}
+#else
+static inline void kasan_set_alloc_size(struct kmem_cache *s, size_t size) { }
+#endif
+
+
 static inline struct kmem_cache *virt_to_cache(const void *obj)
 {
 	struct page *page = virt_to_head_page(obj);
