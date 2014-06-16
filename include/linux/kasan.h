@@ -36,7 +36,7 @@ static inline void kasan_disable_local(void) {}
 
 /* Reserves shadow memory. */
 static inline void kasan_init_shadow(void) {}
-static inline void kasan_poison(void) {}
+static inline void kasan_alloc_shadow(void) {}
 
 static inline void kasan_alloc_pages(struct page *page, unsigned int order) {}
 static inline void kasan_free_pages(struct page *page, unsigned int order) {}
