@@ -15,6 +15,7 @@ CFLAGS_REMOVE_kvmclock.o = -pg
 CFLAGS_REMOVE_ftrace.o = -pg
 CFLAGS_REMOVE_early_printk.o = -pg
 endif
+KASAN_SANITIZE_alternative.o := n
 
 CFLAGS_irq.o := -I$(src)/../include/asm/trace
 
