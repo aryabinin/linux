@@ -21,8 +21,6 @@ endif
 # cond_syscall is currently not LTO compatible
 CFLAGS_sys_ni.o = $(DISABLE_LTO)
 
-KASAN_SANITIZE_jump_label.o := n
-
 obj-y += sched/
 obj-y += locking/
 obj-y += power/

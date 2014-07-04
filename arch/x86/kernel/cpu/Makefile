@@ -8,10 +8,6 @@ CFLAGS_REMOVE_common.o = -pg
 CFLAGS_REMOVE_perf_event.o = -pg
 endif
 
-KASAN_SANITIZE_common.o := n
-KASAN_SANITIZE_perf_event.o := n
-
-
 # Make sure load_percpu_segment has no stackprotector
 nostackp := $(call cc-option, -fno-stack-protector)
 CFLAGS_common.o		:= $(nostackp)
