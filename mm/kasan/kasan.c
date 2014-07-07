@@ -127,7 +127,7 @@ static bool memory_is_zero(const u8 *beg, size_t size)
  * Returns address of the first poisoned byte if the memory region
  * lies in the physical memory and poisoned, returns 0 otherwise.
  */
-static unsigned long memory_is_poisoned(unsigned long addr, size_t size)
+static unsigned long memory_is_poisoned_n(unsigned long addr, size_t size)
 {
 	unsigned long beg, end;
 	unsigned long aligned_beg, aligned_end;
@@ -153,21 +153,122 @@ static unsigned long memory_is_poisoned(unsigned long addr, size_t size)
 	return 0;
 }
 
-static void check_memory_region(unsigned long addr, size_t size, bool write)
+static __always_inline bool memory_is_poisoned_1(unsigned long addr)
 {
-	unsigned long access_addr;
+	s8 shadow_value = *(s8 *)kasan_mem_to_shadow(addr);
+	if (unlikely(shadow_value)) {
+		s8 last_accessible_byte = addr & KASAN_SHADOW_MASK;
+		return unlikely(last_accessible_byte > shadow_value);
+	}
+	return false;
+}
+
+static __always_inline bool memory_is_poisoned_2(unsigned long addr)
+{
+	u16 *shadow_addr = (u16 *)kasan_mem_to_shadow(addr);
+	if (unlikely(*shadow_addr)) {
+		s8 shadow_first_byte = *(s8 *)shadow_addr;
+		s8 shadow_second_byte = *((s8 *)shadow_addr + 1);
+		s8 last_accessible_byte = (addr + 1) & KASAN_SHADOW_MASK;
+
+		if (likely(last_accessible_byte != 0))
+			return unlikely(last_accessible_byte
+					> shadow_first_byte);
+
+		return unlikely(shadow_first_byte
+				|| (last_accessible_byte
+					> shadow_second_byte));
+	}
+	return false;
+}
+
+static __always_inline bool memory_is_poisoned_4(unsigned long addr)
+{
+	u16 *shadow_addr = (u16 *)kasan_mem_to_shadow(addr);
+	if (unlikely(*shadow_addr)) {
+		s8 shadow_first_byte = *(s8 *)shadow_addr;
+		s8 shadow_second_byte = *((s8 *)shadow_addr + 1);
+		s8 last_accessible_byte = (addr + 3) & KASAN_SHADOW_MASK;
+
+		if (likely(IS_ALIGNED(addr, 4)))
+			return unlikely(last_accessible_byte
+					> shadow_first_byte);
+
+		return unlikely(shadow_first_byte
+				|| (last_accessible_byte
+					> shadow_second_byte));
+	}
+	return false;
+}
+
+static __always_inline bool memory_is_poisoned_8(unsigned long addr)
+{
+	u16 *shadow_addr = (u16 *)kasan_mem_to_shadow(addr);
+	if (unlikely(*shadow_addr)) {
+		s8 shadow_first_byte = *(s8 *)shadow_addr;
+		s8 shadow_second_byte = *((s8 *)shadow_addr + 1);
+		s8 last_accessible_byte = (addr + 7) & KASAN_SHADOW_MASK;
+
+		if (likely(IS_ALIGNED(addr, 8)))
+			return unlikely(shadow_first_byte != 0);
+
+		return unlikely(shadow_first_byte
+				|| (last_accessible_byte
+					> shadow_second_byte));
+	}
+	return false;
+}
+
+static __always_inline bool memory_is_poisoned_16(unsigned long addr)
+{
+	u32 *shadow_addr = (u32 *)kasan_mem_to_shadow(addr);
+	if (unlikely(*shadow_addr)) {
+		u16 shadow_first_byte = *(u16 *)shadow_addr;
+		s8 shadow_last_byte = *((s8 *)shadow_addr + 2);
+		s8 last_accessible_byte = (addr + 15) & KASAN_SHADOW_MASK;
+
+		if (likely(IS_ALIGNED(addr, 16)))
+			return unlikely(shadow_first_byte);
+
+		return unlikely(shadow_first_byte
+				|| (last_accessible_byte
+					> shadow_last_byte));
+	}
+	return false;
+}
+
+static __always_inline int memory_is_poisoned(unsigned long addr, size_t size)
+{
+	switch (size) {
+	case 1:
+		return memory_is_poisoned_1(addr);
+	case 2:
+		return memory_is_poisoned_2(addr);
+	case 4:
+		return memory_is_poisoned_4(addr);
+	case 8:
+		return memory_is_poisoned_8(addr);
+	case 16:
+		return memory_is_poisoned_16(addr);
+	default:
+		return memory_is_poisoned_n(addr, size);
+	}
+}
+
+static __always_inline void check_memory_region(unsigned long addr,
+						size_t size, bool write)
+{
 	struct access_info info;
 
 	if (!kasan_enabled())
 		return;
 
-	access_addr = memory_is_poisoned(addr, size);
-	if (access_addr == 0)
+	if (likely(!memory_is_poisoned(addr, size)))
 		return;
 
-	info.access_addr = access_addr;
+	info.access_addr = addr;
 	info.access_size = size;
-	info.shadow_addr = (u8 *)kasan_mem_to_shadow(access_addr);
+	info.shadow_addr = (u8 *)kasan_mem_to_shadow(addr);
 	info.is_write = write;
 	info.thread_id = current->pid;
 	info.strip_addr = _RET_IP_;
