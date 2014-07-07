@@ -31,7 +31,7 @@
 #include "kasan.h"
 #include "../slab.h"
 
-struct static_key kasan_initialized = STATIC_KEY_INIT_FALSE;
+static int kasan_initialized;
 
 static DEFINE_PER_CPU(int, kasan_disabled);
 
@@ -51,7 +51,7 @@ static inline bool addr_is_in_shadow(unsigned long shadow_addr)
 
 void kasan_enable_local(void)
 {
-	if (static_key_false(&kasan_initialized)) {
+	if (likely(kasan_initialized)) {
 		this_cpu_dec(kasan_disabled);
 		preempt_enable();
 	}
@@ -59,7 +59,7 @@ void kasan_enable_local(void)
 
 void kasan_disable_local(void)
 {
-	if (static_key_false(&kasan_initialized)) {
+	if (likely(kasan_initialized)) {
 		preempt_disable();
 		this_cpu_inc(kasan_disabled);
 	}
@@ -67,7 +67,7 @@ void kasan_disable_local(void)
 
 static inline bool kasan_enabled(void)
 {
-	return static_key_false(&kasan_initialized)
+	return likely(kasan_initialized)
 		&& !this_cpu_read(kasan_disabled);
 }
 
@@ -216,13 +216,13 @@ void __init kasan_init_shadow(void)
 			KASAN_SHADOW_GAP);
 		unpoison_shadow((void *)kasan_shadow_end,
 				(size_t)(high_memory - kasan_shadow_end));
-		static_key_slow_inc(&kasan_initialized);
+		kasan_initialized = 1;
 	}
 }
 
 void kasan_alloc_slab_pages(struct page *page, int order)
 {
-	if (!static_key_false(&kasan_initialized))
+	if (unlikely(!kasan_initialized))
 		return;
 
 	poison_shadow(page_address(page), PAGE_SIZE << order, KASAN_SLAB_REDZONE);
@@ -230,7 +230,7 @@ void kasan_alloc_slab_pages(struct page *page, int order)
 
 void kasan_free_slab_pages(struct page *page, int order)
 {
-	if (!static_key_false(&kasan_initialized))
+	if (unlikely(!kasan_initialized))
 		return;
 
 	poison_shadow(page_address(page), PAGE_SIZE << order, KASAN_SLAB_FREE);
@@ -238,7 +238,7 @@ void kasan_free_slab_pages(struct page *page, int order)
 
 void kasan_slab_alloc(struct kmem_cache *cache, void *object)
 {
-	if (!static_key_false(&kasan_initialized))
+	if (unlikely(!kasan_initialized))
 		return;
 
 	if (unlikely(object == NULL))
@@ -253,7 +253,7 @@ void kasan_slab_free(struct kmem_cache *cache, void *object)
 	unsigned long size = cache->size;
 	unsigned long rounded_up_size = round_up(size, KASAN_SHADOW_SCALE_SIZE);
 
-	if (!static_key_false(&kasan_initialized))
+	if (unlikely(!kasan_initialized))
 		return;
 
 	poison_shadow(object, rounded_up_size, KASAN_KMALLOC_FREE);
@@ -263,7 +263,7 @@ void kasan_kmalloc(struct kmem_cache *cache, const void *object, size_t size)
 {
 	unsigned long rounded_up_object_size = cache->size;
 
-	if (!static_key_false(&kasan_initialized))
+	if (unlikely(!kasan_initialized))
 		return;
 
 	if (object == NULL)
@@ -281,7 +281,7 @@ void kasan_kmalloc_large(const void *ptr, size_t size)
 	unsigned long redzone_start;
 	unsigned long redzone_end;
 
-	if (!static_key_false(&kasan_initialized))
+	if (unlikely(!kasan_initialized))
 		return;
 
 	if (unlikely(ptr == NULL))
@@ -320,7 +320,7 @@ void kasan_kfree_large(const void *ptr)
 {
 	struct page *page;
 
-	if (!static_key_false(&kasan_initialized))
+	if (unlikely(!kasan_initialized))
 		return;
 
 	page = virt_to_page(ptr);
@@ -329,7 +329,7 @@ void kasan_kfree_large(const void *ptr)
 
 void kasan_alloc_pages(struct page *page, unsigned int order)
 {
-	if (!static_key_false(&kasan_initialized))
+	if (unlikely(!kasan_initialized))
 		return;
 
 	if (page && !PageHighMem(page))
@@ -338,7 +338,7 @@ void kasan_alloc_pages(struct page *page, unsigned int order)
 
 void kasan_free_pages(struct page *page, unsigned int order)
 {
-	if (!static_key_false(&kasan_initialized))
+	if (unlikely(!kasan_initialized))
 		return;
 
 	if (!PageHighMem(page))
@@ -371,79 +371,78 @@ void *kasan_memmove(void *dst, const void *src, size_t len)
 }
 EXPORT_SYMBOL(kasan_memmove);
 
-void __kasan_read1(unsigned long addr)
+void __asan_load1(unsigned long addr)
 {
 	check_memory_region(addr, 1, false);
 }
-EXPORT_SYMBOL(__kasan_read1);
+EXPORT_SYMBOL(__asan_load1);
 
-void __asan_load1(unsigned long addr)  __attribute__((alias("__kasan_read1")));
-
-void __kasan_read2(unsigned long addr)
+void __asan_load2(unsigned long addr)
 {
 	check_memory_region(addr, 2, false);
 }
-EXPORT_SYMBOL(__kasan_read2);
-void __asan_load2(unsigned long addr)  __attribute__((alias("__kasan_read2")));
+EXPORT_SYMBOL(__asan_load2);
 
-void __kasan_read4(unsigned long addr)
+void __asan_load4(unsigned long addr)
 {
 	check_memory_region(addr, 4, false);
 }
-EXPORT_SYMBOL(__kasan_read4);
+EXPORT_SYMBOL(__asan_load4);
 
-void __asan_load4(unsigned long addr)  __attribute__((alias("__kasan_read4")));
-
-void __kasan_read8(unsigned long addr)
+void __asan_load8(unsigned long addr)
 {
 	check_memory_region(addr, 8, false);
 }
-EXPORT_SYMBOL(__kasan_read8);
-void __asan_load8(unsigned long addr)  __attribute__((alias("__kasan_read8")));
+EXPORT_SYMBOL(__asan_load8);
 
-void __kasan_read16(unsigned long addr)
+void __asan_load16(unsigned long addr)
 {
 	check_memory_region(addr, 16, false);
 }
-EXPORT_SYMBOL(__kasan_read16);
-void __asan_load16(unsigned long addr)  __attribute__((alias("__kasan_read16")));
+EXPORT_SYMBOL(__asan_load16);
 
-void __kasan_write1(unsigned long addr)
+void __asan_store1(unsigned long addr)
 {
 	check_memory_region(addr, 1, true);
 }
-EXPORT_SYMBOL(__kasan_write1);
-void __asan_store1(unsigned long addr)  __attribute__((alias("__kasan_write1")));
+EXPORT_SYMBOL(__asan_store1);
 
-void __kasan_write2(unsigned long addr)
+void __asan_store2(unsigned long addr)
 {
 	check_memory_region(addr, 2, true);
 }
-EXPORT_SYMBOL(__kasan_write2);
-void __asan_store2(unsigned long addr)  __attribute__((alias("__kasan_write2")));
+EXPORT_SYMBOL(__asan_store2);
 
-void __kasan_write4(unsigned long addr)
+void __asan_store4(unsigned long addr)
 {
 	check_memory_region(addr, 4, true);
 }
-EXPORT_SYMBOL(__kasan_write4);
-void __asan_store4(unsigned long addr)  __attribute__((alias("__kasan_write4")));
+EXPORT_SYMBOL(__asan_store4);
 
-void __kasan_write8(unsigned long addr)
+void __asan_store8(unsigned long addr)
 {
 	check_memory_region(addr, 8, true);
 }
-EXPORT_SYMBOL(__kasan_write8);
-void __asan_store8(unsigned long addr)  __attribute__((alias("__kasan_write8")));
+EXPORT_SYMBOL(__asan_store8);
 
-void __kasan_write16(unsigned long addr)
+void __asan_store16(unsigned long addr)
 {
 	check_memory_region(addr, 16, true);
 }
-EXPORT_SYMBOL(__kasan_write16);
+EXPORT_SYMBOL(__asan_store16);
 
-void __asan_store16(unsigned long addr)  __attribute__((alias("__kasan_write16")));
+void __asan_loadN(unsigned long addr, size_t size)
+{
+	check_memory_region(addr, size, false);
+}
+EXPORT_SYMBOL(__asan_loadN);
+
+void __asan_storeN(unsigned long addr, size_t size)
+{
+	check_memory_region(addr, size, true);
+}
+EXPORT_SYMBOL(__asan_storeN);
+
 
 void __asan_init_v3(void) {}
 void __asan_handle_no_return(void) {}
-//unsigned long __asan_get_shadow_ptr(void) {return 0;}
