@@ -31,7 +31,7 @@
 #include "kasan.h"
 #include "../slab.h"
 
-static int kasan_initialized;
+static bool __read_mostly kasan_initialized;
 
 static DEFINE_PER_CPU(int, kasan_disabled);
 
@@ -40,13 +40,7 @@ unsigned long kasan_shadow_end;
 
 static inline bool addr_is_in_mem(unsigned long addr)
 {
-	return addr >= PAGE_OFFSET && addr < (unsigned long)high_memory;
-}
-
-static inline bool addr_is_in_shadow(unsigned long shadow_addr)
-{
-	return (shadow_addr >= kasan_shadow_start) &&
-		(shadow_addr < kasan_shadow_end);
+	return likely(addr >= PAGE_OFFSET && addr < (unsigned long)high_memory);
 }
 
 void kasan_enable_local(void)
@@ -139,13 +133,8 @@ static unsigned long memory_is_poisoned(unsigned long addr, size_t size)
 	unsigned long aligned_beg, aligned_end;
 	unsigned long shadow_beg, shadow_end;
 
-	if (size == 0)
-		return 0;
-
 	beg = addr;
 	end = beg + size;
-	if (!addr_is_in_mem(beg) || !addr_is_in_mem(end))
-		return 0;
 
 	aligned_beg = round_up(beg, KASAN_SHADOW_SCALE_SIZE);
 	aligned_end = round_down(end, KASAN_SHADOW_SCALE_SIZE);
@@ -187,23 +176,23 @@ static void check_memory_region(unsigned long addr, size_t size, bool write)
 
 void __init kasan_alloc_shadow(void)
 {
-	unsigned long kernel_vm_size = (unsigned long)high_memory - PAGE_OFFSET;
-	unsigned long kasan_shadow_size;
-	phys_addr_t found_free_range;
+	unsigned long lowmem_size = (unsigned long)high_memory - PAGE_OFFSET;
+	unsigned long shadow_size;
+	phys_addr_t shadow_phys_start;
 
-	kasan_shadow_size = kernel_vm_size >> KASAN_SHADOW_SCALE_SHIFT;
+	shadow_size = lowmem_size >> KASAN_SHADOW_SCALE_SHIFT;
 
-	found_free_range = memblock_alloc(kasan_shadow_size, PAGE_SIZE);
-	if (!found_free_range) {
-		pr_err("Unable to reserve shadow region\n");
+	shadow_phys_start = memblock_alloc(shadow_size, PAGE_SIZE);
+	if (!shadow_phys_start) {
+		pr_err("Unable to reserve shadow memory\n");
 		return;
 	}
 
-	kasan_shadow_start = (unsigned long)phys_to_virt(found_free_range);
-	kasan_shadow_end = kasan_shadow_start + kasan_shadow_size;
+	kasan_shadow_start = (unsigned long)phys_to_virt(shadow_phys_start);
+	kasan_shadow_end = kasan_shadow_start + shadow_size;
 
-	pr_info("Shadow virt start: 0x%lx\n", kasan_shadow_start);
-	pr_info("Shadow virt end: 0x%lx\n", kasan_shadow_end);
+	pr_info("reserved shadow memory: [0x%lx - 0x%lx]\n",
+		kasan_shadow_start, kasan_shadow_end);
 }
 
 void __init kasan_init_shadow(void)
@@ -216,7 +205,8 @@ void __init kasan_init_shadow(void)
 			KASAN_SHADOW_GAP);
 		unpoison_shadow((void *)kasan_shadow_end,
 				(size_t)(high_memory - kasan_shadow_end));
-		kasan_initialized = 1;
+		kasan_initialized = true;
+		pr_info("shadow memory initialized\n");
 	}
 }
 
@@ -266,7 +256,7 @@ void kasan_kmalloc(struct kmem_cache *cache, const void *object, size_t size)
 	if (unlikely(!kasan_initialized))
 		return;
 
-	if (object == NULL)
+	if (unlikely(object == NULL))
 		return;
 
 	poison_shadow(object, rounded_up_object_size,
@@ -287,17 +277,14 @@ void kasan_kmalloc_large(const void *ptr, size_t size)
 	if (unlikely(ptr == NULL))
 		return;
 
-	page = virt_to_head_page(ptr);
+	page = virt_to_page(ptr);
 	redzone_start = round_up((unsigned long)(ptr + size),
 				KASAN_SHADOW_SCALE_SIZE);
 	redzone_end = (unsigned long)ptr + (PAGE_SIZE << compound_order(page));
 
-	BUG_ON(redzone_end < redzone_start);
-
 	unpoison_shadow(ptr, size);
-	if (redzone_end > redzone_start)
-		poison_shadow((void *)redzone_start, redzone_end - redzone_start,
-			KASAN_PAGE_REDZONE);
+	poison_shadow((void *)redzone_start, redzone_end - redzone_start,
+		KASAN_PAGE_REDZONE);
 }
 EXPORT_SYMBOL(kasan_kmalloc_large);
 
@@ -308,7 +295,7 @@ void kasan_krealloc(const void *object, size_t size)
 	if (unlikely(object == ZERO_SIZE_PTR))
 		return;
 
-	page = virt_to_head_page(object);
+	page = virt_to_page(object);
 
 	if (unlikely(!PageSlab(page)))
 		kasan_kmalloc_large(object, size);
@@ -401,6 +388,12 @@ void __asan_load16(unsigned long addr)
 }
 EXPORT_SYMBOL(__asan_load16);
 
+void __asan_loadN(unsigned long addr, size_t size)
+{
+	check_memory_region(addr, size, false);
+}
+EXPORT_SYMBOL(__asan_loadN);
+
 void __asan_store1(unsigned long addr)
 {
 	check_memory_region(addr, 1, true);
@@ -431,18 +424,15 @@ void __asan_store16(unsigned long addr)
 }
 EXPORT_SYMBOL(__asan_store16);
 
-void __asan_loadN(unsigned long addr, size_t size)
-{
-	check_memory_region(addr, size, false);
-}
-EXPORT_SYMBOL(__asan_loadN);
-
 void __asan_storeN(unsigned long addr, size_t size)
 {
 	check_memory_region(addr, size, true);
 }
 EXPORT_SYMBOL(__asan_storeN);
 
-
+/* to shut up compiler complains */
 void __asan_init_v3(void) {}
+EXPORT_SYMBOL(__asan_init_v3);
+
 void __asan_handle_no_return(void) {}
+EXPORT_SYMBOL(__asan_handle_no_return);
