@@ -384,7 +384,12 @@ LDFLAGS_MODULE  =
 CFLAGS_KERNEL	=
 AFLAGS_KERNEL	=
 CFLAGS_GCOV	= -fprofile-arcs -ftest-coverage
-CFLAGS_KASAN	= -fsanitize=address --param asan-stack=0 --param asan-use-after-return=0 --param asan-globals=0 --param asan-memintrin=0 --param asan-instrumentation-with-call-threshold=0 --param asan-fixed-shadow-offset=0 -DKASAN_HOOKS
+CFLAGS_KASAN	= -fsanitize=address --param asan-stack=0 \
+			--param asan-use-after-return=0 \
+			--param asan-globals=0 \
+			--param asan-memintrin=0 \
+			--param asan-instrumentation-with-call-threshold=0 \
+			-DKASAN_HOOKS
 
 
 # Use USERINCLUDE when you must reference the UAPI directories only.
