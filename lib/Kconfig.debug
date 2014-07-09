@@ -633,6 +633,14 @@ config DEBUG_STACKOVERFLOW
 
 	  If in doubt, say "N".
 
+config KMALLOC_BUG_TEST
+	tristate "Module for testing bugs detection in sl[auo]b"
+	default n
+	help
+	  This is a test module doing varios nasty things like
+	  out of bounds accesses, use after free. It is usefull for testing
+	  kernel debugging features like kernel address sanitizer.
+
 source "lib/Kconfig.kmemcheck"
 
 source "lib/Kconfig.kasan"
