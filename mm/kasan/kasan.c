@@ -178,6 +178,119 @@ void __init kasan_init_shadow(void)
 	}
 }
 
+void kasan_alloc_slab_pages(struct page *page, int order)
+{
+	if (unlikely(!kasan_initialized))
+		return;
+
+	poison_shadow(page_address(page), PAGE_SIZE << order, KASAN_SLAB_PADDING);
+}
+
+void kasan_free_slab_pages(struct page *page, int order)
+{
+	if (unlikely(!kasan_initialized))
+		return;
+
+	poison_shadow(page_address(page), PAGE_SIZE << order, KASAN_SLAB_FREE);
+}
+
+void kasan_slab_alloc(struct kmem_cache *cache, void *object)
+{
+	if (unlikely(!kasan_initialized))
+		return;
+
+	if (unlikely(object == NULL))
+		return;
+
+	poison_shadow(object, cache->size, KASAN_KMALLOC_REDZONE);
+	unpoison_shadow(object, cache->object_size);
+}
+
+void kasan_slab_free(struct kmem_cache *cache, void *object)
+{
+	unsigned long size = cache->size;
+	unsigned long rounded_up_size = round_up(size, KASAN_SHADOW_SCALE_SIZE);
+
+	if (unlikely(!kasan_initialized))
+		return;
+
+	if (unlikely(cache->flags & SLAB_DESTROY_BY_RCU))
+		return;
+
+	poison_shadow(object, rounded_up_size, KASAN_KMALLOC_FREE);
+}
+
+void kasan_kmalloc(struct kmem_cache *cache, const void *object, size_t size)
+{
+	unsigned long redzone_start;
+	unsigned long redzone_end;
+
+	if (unlikely(!kasan_initialized))
+		return;
+
+	if (unlikely(object == NULL))
+		return;
+
+	redzone_start = round_up((unsigned long)(object + size),
+				KASAN_SHADOW_SCALE_SIZE);
+	redzone_end = (unsigned long)object + cache->size;
+
+	unpoison_shadow(object, size);
+	poison_shadow((void *)redzone_start, redzone_end - redzone_start,
+		KASAN_KMALLOC_REDZONE);
+
+}
+EXPORT_SYMBOL(kasan_kmalloc);
+
+void kasan_kmalloc_large(const void *ptr, size_t size)
+{
+	struct page *page;
+	unsigned long redzone_start;
+	unsigned long redzone_end;
+
+	if (unlikely(!kasan_initialized))
+		return;
+
+	if (unlikely(ptr == NULL))
+		return;
+
+	page = virt_to_page(ptr);
+	redzone_start = round_up((unsigned long)(ptr + size),
+				KASAN_SHADOW_SCALE_SIZE);
+	redzone_end = (unsigned long)ptr + (PAGE_SIZE << compound_order(page));
+
+	unpoison_shadow(ptr, size);
+	poison_shadow((void *)redzone_start, redzone_end - redzone_start,
+		KASAN_PAGE_REDZONE);
+}
+EXPORT_SYMBOL(kasan_kmalloc_large);
+
+void kasan_krealloc(const void *object, size_t size)
+{
+	struct page *page;
+
+	if (unlikely(object == ZERO_SIZE_PTR))
+		return;
+
+	page = virt_to_head_page(object);
+
+	if (unlikely(!PageSlab(page)))
+		kasan_kmalloc_large(object, size);
+	else
+		kasan_kmalloc(page->slab_cache, object, size);
+}
+
+void kasan_kfree_large(const void *ptr)
+{
+	struct page *page;
+
+	if (unlikely(!kasan_initialized))
+		return;
+
+	page = virt_to_page(ptr);
+	poison_shadow(ptr, PAGE_SIZE << compound_order(page), KASAN_FREE_PAGE);
+}
+
 void kasan_alloc_pages(struct page *page, unsigned int order)
 {
 	if (unlikely(!kasan_initialized))
