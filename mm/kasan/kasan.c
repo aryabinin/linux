@@ -372,6 +372,9 @@ EXPORT_SYMBOL(__asan_load16);
 
 void __asan_loadN(unsigned long addr, size_t size)
 {
+	if (unlikely(size == 0))
+		return;
+
 	check_memory_region(addr, size, false);
 }
 EXPORT_SYMBOL(__asan_loadN);
@@ -408,6 +411,9 @@ EXPORT_SYMBOL(__asan_store16);
 
 void __asan_storeN(unsigned long addr, size_t size)
 {
+	if (unlikely(size == 0))
+		return;
+
 	check_memory_region(addr, size, true);
 }
 EXPORT_SYMBOL(__asan_storeN);
