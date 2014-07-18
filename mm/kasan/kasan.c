@@ -213,6 +213,9 @@ void kasan_slab_free(struct kmem_cache *cache, void *object)
 	if (unlikely(!kasan_initialized))
 		return;
 
+	if (unlikely(cache->flags & SLAB_DESTROY_BY_RCU))
+		return;
+
 	poison_shadow(object, rounded_up_size, KASAN_KMALLOC_FREE);
 }
 
