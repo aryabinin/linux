@@ -98,6 +98,7 @@
 #include <asm/processor.h>
 #include <linux/atomic.h>
 
+#include <linux/kasan.h>
 #include <linux/kmemcheck.h>
 #include <linux/kmemleak.h>
 #include <linux/memory_hotplug.h>
@@ -1113,7 +1114,10 @@ static bool update_checksum(struct kmemleak_object *object)
 	if (!kmemcheck_is_obj_initialized(object->pointer, object->size))
 		return false;
 
+	kasan_disable_local();
 	object->checksum = crc32(0, (void *)object->pointer, object->size);
+	kasan_enable_local();
+
 	return object->checksum != old_csum;
 }
 
@@ -1142,6 +1146,7 @@ static int scan_should_stop(void)
  * Scan a memory block (exclusive range) for valid pointers and add those
  * found to the gray list.
  */
+__attribute__((no_sanitize_address))
 static void scan_block(void *_start, void *_end,
 		       struct kmemleak_object *scanned, int allow_resched)
 {
