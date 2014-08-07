@@ -384,6 +384,7 @@ static const char *table_lookup_model(struct cpuinfo_x86 *c)
 __u32 cpu_caps_cleared[NCAPINTS];
 __u32 cpu_caps_set[NCAPINTS];
 
+__attribute__((no_sanitize_address))
 void load_percpu_segment(int cpu)
 {
 #ifdef CONFIG_X86_32
