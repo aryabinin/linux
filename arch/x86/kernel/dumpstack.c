@@ -250,24 +250,36 @@ void oops_end(unsigned long flags, struct pt_regs *regs, int signr)
 }
 NOKPROBE_SYMBOL(oops_end);
 
+#ifdef CONFIG_PREEMPT
+#define S_PREEMPT " PREEMPT"
+#else
+#define S_PREEMPT ""
+#endif
+#ifdef CONFIG_SMP
+#define S_SMP " SMP"
+#else
+#define S_SMP ""
+#endif
+#ifdef CONFIG_DEBUG_PAGEALLOC
+#define S_DEBUG_PAGEALLOC " DEBUG_PAGEALLOC"
+#else
+#define S_DEBUG_PAGEALLOC ""
+#endif
+#ifdef CONFIG_KASAN
+#define S_KASAN " KASAN"
+#else
+#define S_KASAN ""
+#endif
+
 int __die(const char *str, struct pt_regs *regs, long err)
 {
 #ifdef CONFIG_X86_32
 	unsigned short ss;
 	unsigned long sp;
 #endif
-	printk(KERN_DEFAULT
-	       "%s: %04lx [#%d] ", str, err & 0xffff, ++die_counter);
-#ifdef CONFIG_PREEMPT
-	printk("PREEMPT ");
-#endif
-#ifdef CONFIG_SMP
-	printk("SMP ");
-#endif
-#ifdef CONFIG_DEBUG_PAGEALLOC
-	printk("DEBUG_PAGEALLOC");
-#endif
-	printk("\n");
+	printk(KERN_DEFAULT "%s: %04lx [#%d]" S_PREEMPT S_SMP S_DEBUG_PAGEALLOC
+		S_KASAN "\n", str, err & 0xffff, ++die_counter);
+
 	if (notify_die(DIE_OOPS, str, regs, err,
 			current->thread.trap_nr, SIGSEGV) == NOTIFY_STOP)
 		return 1;
