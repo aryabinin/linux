@@ -511,8 +511,8 @@ int gxio_mpipe_link_instance(const char *link_name)
 	if (!context)
 		return GXIO_ERR_NO_DEVICE;
 
-	strncpy(name.name, link_name, sizeof(name.name));
-	name.name[GXIO_MPIPE_LINK_NAME_LEN - 1] = '\0';
+	if (strscpy(name.name, link_name, sizeof(name.name)) == 0)
+		return GXIO_ERR_NO_DEVICE;
 
 	return gxio_mpipe_info_instance_aux(context, name);
 }
@@ -529,7 +529,8 @@ int gxio_mpipe_link_enumerate_mac(int idx, char *link_name, uint8_t *link_mac)
 
 	rv = gxio_mpipe_info_enumerate_aux(context, idx, &name, &mac);
 	if (rv >= 0) {
-		strncpy(link_name, name.name, sizeof(name.name));
+		if (strscpy(link_name, name.name, sizeof(name.name)) == 0)
+			return GXIO_ERR_INVAL_MEMORY_SIZE;
 		memcpy(link_mac, mac.mac, sizeof(mac.mac));
 	}
 
@@ -545,8 +546,8 @@ int gxio_mpipe_link_open(gxio_mpipe_link_t *link,
 	_gxio_mpipe_link_name_t name;
 	int rv;
 
-	strncpy(name.name, link_name, sizeof(name.name));
-	name.name[GXIO_MPIPE_LINK_NAME_LEN - 1] = '\0';
+	if (strscpy(name.name, link_name, sizeof(name.name)) == 0)
+		return GXIO_ERR_NO_DEVICE;
 
 	rv = gxio_mpipe_link_open_aux(context, name, flags);
 	if (rv < 0)
