@@ -111,7 +111,7 @@ static int asoc_simple_card_dai_init(struct snd_soc_pcm_runtime *rtd)
 static int
 asoc_simple_card_sub_parse_of(struct device_node *np,
 			      struct asoc_simple_dai *dai,
-			      const struct device_node **p_node,
+			      struct device_node **p_node,
 			      const char **name)
 {
 	struct device_node *node;
@@ -163,11 +163,11 @@ asoc_simple_card_sub_parse_of(struct device_node *np,
 	return 0;
 }
 
-static int simple_card_dai_link_of(struct device_node *node,
-				   struct device *dev,
-				   struct snd_soc_dai_link *dai_link,
-				   struct simple_dai_props *dai_props,
-				   bool is_top_level_node)
+static int asoc_simple_card_dai_link_of(struct device_node *node,
+					struct device *dev,
+					struct snd_soc_dai_link *dai_link,
+					struct simple_dai_props *dai_props,
+					bool is_top_level_node)
 {
 	struct device_node *np = NULL;
 	struct device_node *bitclkmaster = NULL;
@@ -274,6 +274,7 @@ static int simple_card_dai_link_of(struct device_node *node,
 				dai_link->codec_dai_name);
 	dai_link->name = dai_link->stream_name = name;
 	dai_link->ops = &asoc_simple_card_ops;
+	dai_link->init = asoc_simple_card_dai_init;
 
 	dev_dbg(dev, "\tname : %s\n", dai_link->stream_name);
 	dev_dbg(dev, "\tcpu : %s / %04x / %d\n",
@@ -284,6 +285,17 @@ static int simple_card_dai_link_of(struct device_node *node,
 		dai_link->codec_dai_name,
 		dai_props->codec_dai.fmt,
 		dai_props->codec_dai.sysclk);
+
+	/*
+	 * soc_bind_dai_link() will check cpu name
+	 * after of_node matching if dai_link has cpu_dai_name.
+	 * but, it will never match if name was created by fmt_single_name()
+	 * remove cpu_dai_name to escape name matching.
+	 * see
+	 *	fmt_single_name()
+	 *	fmt_multiple_name()
+	 */
+	dai_link->cpu_dai_name = NULL;
 
 dai_link_of_err:
 	if (np)
@@ -334,19 +346,23 @@ static int asoc_simple_card_parse_of(struct device_node *node,
 
 	if (multi) {
 		struct device_node *np = NULL;
-		int i;
-		for (i = 0; (np = of_get_next_child(node, np)); i++) {
+		int i = 0;
+
+		for_each_child_of_node(node, np) {
 			dev_dbg(dev, "\tlink %d:\n", i);
-			ret = simple_card_dai_link_of(np, dev, dai_link + i,
-						      dai_props + i, false);
+			ret = asoc_simple_card_dai_link_of(np, dev,
+							   dai_link + i,
+							   dai_props + i,
+							   false);
 			if (ret < 0) {
 				of_node_put(np);
 				return ret;
 			}
+			i++;
 		}
 	} else {
-		ret = simple_card_dai_link_of(node, dev, dai_link, dai_props,
-					      true);
+		ret = asoc_simple_card_dai_link_of(node, dev,
+						   dai_link, dai_props, true);
 		if (ret < 0)
 			return ret;
 	}
@@ -427,18 +443,6 @@ static int asoc_simple_card_probe(struct platform_device *pdev)
 			goto err;
 		}
 
-		/*
-		 * soc_bind_dai_link() will check cpu name
-		 * after of_node matching if dai_link has cpu_dai_name.
-		 * but, it will never match if name was created by fmt_single_name()
-		 * remove cpu_dai_name to escape name matching.
-		 * see
-		 *	fmt_single_name()
-		 *	fmt_multiple_name()
-		 */
-		if (num_links == 1)
-			dai_link->cpu_dai_name = NULL;
-
 	} else {
 		struct asoc_simple_card_info *cinfo;
 
@@ -464,6 +468,7 @@ static int asoc_simple_card_probe(struct platform_device *pdev)
 		dai_link->codec_name	= cinfo->codec;
 		dai_link->cpu_dai_name	= cinfo->cpu_dai.name;
 		dai_link->codec_dai_name = cinfo->codec_dai.name;
+		dai_link->init		= asoc_simple_card_dai_init;
 		memcpy(&priv->dai_props->cpu_dai, &cinfo->cpu_dai,
 					sizeof(priv->dai_props->cpu_dai));
 		memcpy(&priv->dai_props->codec_dai, &cinfo->codec_dai,
@@ -473,18 +478,20 @@ static int asoc_simple_card_probe(struct platform_device *pdev)
 		priv->dai_props->codec_dai.fmt	|= cinfo->daifmt;
 	}
 
-	/*
-	 * init snd_soc_dai_link
-	 */
-	dai_link->init = asoc_simple_card_dai_init;
-
 	snd_soc_card_set_drvdata(&priv->snd_card, priv);
 
 	ret = devm_snd_soc_register_card(&pdev->dev, &priv->snd_card);
+	if (ret >= 0)
+		return ret;
 
 err:
 	asoc_simple_card_unref(pdev);
 	return ret;
+}
+
+static int asoc_simple_card_remove(struct platform_device *pdev)
+{
+	return asoc_simple_card_unref(pdev);
 }
 
 static const struct of_device_id asoc_simple_of_match[] = {
@@ -500,6 +507,7 @@ static struct platform_driver asoc_simple_card = {
 		.of_match_table = asoc_simple_of_match,
 	},
 	.probe = asoc_simple_card_probe,
+	.remove = asoc_simple_card_remove,
 };
 
 module_platform_driver(asoc_simple_card);
