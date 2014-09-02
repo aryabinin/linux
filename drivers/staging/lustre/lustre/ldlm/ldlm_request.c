@@ -510,7 +510,7 @@ static void failed_lock_cleanup(struct ldlm_namespace *ns,
 int ldlm_cli_enqueue_fini(struct obd_export *exp, struct ptlrpc_request *req,
 			  ldlm_type_t type, __u8 with_policy, ldlm_mode_t mode,
 			  __u64 *flags, void *lvb, __u32 lvb_len,
-			  struct lustre_handle *lockh,int rc)
+			  struct lustre_handle *lockh, int rc)
 {
 	struct ldlm_namespace *ns = exp->exp_obd->obd_namespace;
 	int is_replay = *flags & LDLM_FL_REPLAY;
@@ -629,7 +629,8 @@ int ldlm_cli_enqueue_fini(struct obd_export *exp, struct ptlrpc_request *req,
 						&reply->lock_desc.l_policy_data,
 						&lock->l_policy_data);
 		if (type != LDLM_PLAIN)
-			LDLM_DEBUG(lock,"client-side enqueue, new policy data");
+			LDLM_DEBUG(lock,
+				   "client-side enqueue, new policy data");
 	}
 
 	if ((*flags) & LDLM_FL_AST_SENT ||
@@ -876,21 +877,8 @@ int ldlm_cli_enqueue(struct obd_export *exp, struct ptlrpc_request **reqp,
 		/* for the local lock, add the reference */
 		ldlm_lock_addref_internal(lock, einfo->ei_mode);
 		ldlm_lock2handle(lock, lockh);
-		if (policy != NULL) {
-			/* INODEBITS_INTEROP: If the server does not support
-			 * inodebits, we will request a plain lock in the
-			 * descriptor (ldlm_lock2desc() below) but use an
-			 * inodebits lock internally with both bits set.
-			 */
-			if (einfo->ei_type == LDLM_IBITS &&
-			    !(exp_connect_flags(exp) &
-			      OBD_CONNECT_IBITS))
-				lock->l_policy_data.l_inodebits.bits =
-					MDS_INODELOCK_LOOKUP |
-					MDS_INODELOCK_UPDATE;
-			else
+		if (policy != NULL)
 				lock->l_policy_data = *policy;
-		}
 
 		if (einfo->ei_type == LDLM_EXTENT)
 			lock->l_req_extent = policy->l_extent;
@@ -1261,8 +1249,7 @@ int ldlm_cli_update_pool(struct ptlrpc_request *req)
 	__u32 new_limit;
 
 	if (unlikely(!req->rq_import || !req->rq_import->imp_obd ||
-		     !imp_connect_lru_resize(req->rq_import)))
-	{
+		     !imp_connect_lru_resize(req->rq_import))) {
 		/*
 		 * Do nothing for corner cases.
 		 */
