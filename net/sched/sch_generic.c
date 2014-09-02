@@ -63,15 +63,18 @@ static inline struct sk_buff *dequeue_skb(struct Qdisc *q)
 
 	if (unlikely(skb)) {
 		/* check the reason of requeuing without tx lock first */
-		txq = netdev_get_tx_queue(txq->dev, skb_get_queue_mapping(skb));
+		txq = skb_get_tx_queue(txq->dev, skb);
 		if (!netif_xmit_frozen_or_stopped(txq)) {
 			q->gso_skb = NULL;
 			q->q.qlen--;
 		} else
 			skb = NULL;
 	} else {
-		if (!(q->flags & TCQ_F_ONETXQUEUE) || !netif_xmit_frozen_or_stopped(txq))
+		if (!(q->flags & TCQ_F_ONETXQUEUE) || !netif_xmit_frozen_or_stopped(txq)) {
 			skb = q->dequeue(q);
+			if (skb)
+				skb = validate_xmit_skb(skb, qdisc_dev(q));
+		}
 	}
 
 	return skb;
@@ -126,7 +129,7 @@ int sch_direct_xmit(struct sk_buff *skb, struct Qdisc *q,
 
 	HARD_TX_LOCK(dev, txq, smp_processor_id());
 	if (!netif_xmit_frozen_or_stopped(txq))
-		ret = dev_hard_start_xmit(skb, dev, txq);
+		skb = dev_hard_start_xmit(skb, dev, txq, &ret);
 
 	HARD_TX_UNLOCK(dev, txq);
 
@@ -183,10 +186,12 @@ static inline int qdisc_restart(struct Qdisc *q)
 	skb = dequeue_skb(q);
 	if (unlikely(!skb))
 		return 0;
+
 	WARN_ON_ONCE(skb_dst_is_noref(skb));
+
 	root_lock = qdisc_lock(q);
 	dev = qdisc_dev(q);
-	txq = netdev_get_tx_queue(dev, skb_get_queue_mapping(skb));
+	txq = skb_get_tx_queue(dev, skb);
 
 	return sch_direct_xmit(skb, q, dev, txq, root_lock);
 }

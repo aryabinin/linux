@@ -1683,7 +1683,7 @@ static void be_rx_compl_process(struct be_rx_obj *rxo, struct napi_struct *napi,
 	if (netdev->features & NETIF_F_RXHASH)
 		skb_set_hash(skb, rxcp->rss_hash, PKT_HASH_TYPE_L3);
 
-	skb->encapsulation = rxcp->tunneled;
+	skb->csum_level = rxcp->tunneled;
 	skb_mark_napi_id(skb, napi);
 
 	if (rxcp->vlanf)
@@ -1741,7 +1741,7 @@ static void be_rx_compl_process_gro(struct be_rx_obj *rxo,
 	if (adapter->netdev->features & NETIF_F_RXHASH)
 		skb_set_hash(skb, rxcp->rss_hash, PKT_HASH_TYPE_L3);
 
-	skb->encapsulation = rxcp->tunneled;
+	skb->csum_level = rxcp->tunneled;
 	skb_mark_napi_id(skb, napi);
 
 	if (rxcp->vlanf)
@@ -1991,7 +1991,7 @@ static u16 be_tx_compl_process(struct be_adapter *adapter,
 		queue_tail_inc(txq);
 	} while (cur_index != last_index);
 
-	dev_kfree_skb_any(sent_skb);
+	dev_consume_skb_any(sent_skb);
 	return num_wrbs;
 }
 
