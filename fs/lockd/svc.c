@@ -313,6 +313,8 @@ static int lockd_start_svc(struct svc_serv *serv)
 			"lockd_up: kthread_run failed, error=%d\n", error);
 		goto out_task;
 	}
+	nlmsvc_rqst->rq_task = nlmsvc_task;
+
 	dprintk("lockd_up: service started\n");
 	return 0;
 
@@ -583,7 +585,6 @@ static int lockd_init_net(struct net *net)
 	struct lockd_net *ln = net_generic(net, lockd_net_id);
 
 	INIT_DELAYED_WORK(&ln->grace_period_end, grace_ender);
-	INIT_LIST_HEAD(&ln->grace_list);
 	spin_lock_init(&ln->nsm_clnt_lock);
 	return 0;
 }
