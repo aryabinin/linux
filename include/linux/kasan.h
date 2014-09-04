@@ -14,7 +14,7 @@ struct page;
 
 static inline unsigned long kasan_mem_to_shadow(unsigned long addr)
 {
-	return ((addr - KASAN_SHADOW_START) >> KASAN_SHADOW_SCALE_SHIFT)
+	return ((addr - 0xffff800000000000UL) >> KASAN_SHADOW_SCALE_SHIFT)
 		+ KASAN_SHADOW_START;
 }
 
@@ -29,6 +29,7 @@ static inline void kasan_disable_local(void)
 }
 
 void kasan_unpoison_shadow(const void *address, size_t size);
+void kasan_map_shadow(void);
 
 #else /* CONFIG_KASAN */
 
@@ -36,6 +37,8 @@ static inline void kasan_unpoison_shadow(const void *address, size_t size) {}
 
 static inline void kasan_enable_local(void) {}
 static inline void kasan_disable_local(void) {}
+
+static inline void kasan_map_shadow(void) {}
 
 #endif /* CONFIG_KASAN */
 
