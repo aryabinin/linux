@@ -11,8 +11,10 @@ extern struct range pfn_mapped[E820_X_MAX];
 static int __init map_range(struct range *range)
 {
 	int ret;
-	unsigned long start = kasan_mem_to_shadow(pfn_to_kaddr(range->start));
-	unsigned long end = kasan_mem_to_shadow(pfn_to_kaddr(range->end));
+	unsigned long start = kasan_mem_to_shadow(
+		(unsigned long)pfn_to_kaddr(range->start));
+	unsigned long end = kasan_mem_to_shadow(
+		(unsigned long)pfn_to_kaddr(range->end));
 
 	ret = vmemmap_populate(start, end, NUMA_NO_NODE);
 
