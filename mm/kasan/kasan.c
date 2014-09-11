@@ -58,33 +58,201 @@ void kasan_unpoison_shadow(const void *address, size_t size)
 	}
 }
 
-static __always_inline bool address_is_poisoned(unsigned long addr)
+static __always_inline bool memory_is_poisoned_1(unsigned long addr)
 {
 	s8 shadow_value = *(s8 *)kasan_mem_to_shadow(addr);
-
-	if (shadow_value != 0) {
-		s8 last_byte = addr & KASAN_SHADOW_MASK;
-
-		return last_byte >= shadow_value;
+	if (unlikely(shadow_value)) {
+		s8 last_accessible_byte = addr & KASAN_SHADOW_MASK;
+		return unlikely(last_accessible_byte >= shadow_value);
 	}
 	return false;
 }
 
-static __always_inline unsigned long memory_is_poisoned(unsigned long addr,
-							size_t size)
+static __always_inline bool memory_is_poisoned_2(unsigned long addr)
 {
-	unsigned long end = addr + size;
+	u16 *shadow_addr = (u16 *)kasan_mem_to_shadow(addr);
+	if (unlikely(*shadow_addr)) {
+		s8 shadow_first_byte = *(s8 *)shadow_addr;
+		s8 shadow_second_byte = *((s8 *)shadow_addr + 1);
+		s8 last_accessible_byte = (addr + 1) & KASAN_SHADOW_MASK;
 
-	for (; addr < end; addr++)
-		if (unlikely(address_is_poisoned(addr)))
-			return addr;
+		if (likely(last_accessible_byte != 0))
+			return unlikely(shadow_first_byte && (last_accessible_byte
+									>= shadow_first_byte));
+
+		return unlikely(shadow_first_byte
+				|| (last_accessible_byte
+					>= shadow_second_byte));
+	}
+	return false;
+}
+
+static __always_inline bool memory_is_poisoned_4(unsigned long addr)
+{
+	u16 *shadow_addr = (u16 *)kasan_mem_to_shadow(addr);
+	if (unlikely(*shadow_addr)) {
+		s8 shadow_first_byte = *(s8 *)shadow_addr;
+		s8 shadow_second_byte = *((s8 *)shadow_addr + 1);
+		s8 last_accessible_byte = (addr + 3) & KASAN_SHADOW_MASK;
+
+		if (likely(shadow_addr == kasan_mem_to_shadow(addr+3)))
+			return unlikely(shadow_first_byte && (last_accessible_byte
+									>= shadow_first_byte));
+
+		return unlikely(shadow_first_byte
+				|| (last_accessible_byte
+					>= shadow_second_byte));
+	}
+	return false;
+}
+
+static __always_inline bool memory_is_poisoned_8(unsigned long addr)
+{
+	u16 *shadow_addr = (u16 *)kasan_mem_to_shadow(addr);
+	if (unlikely(*shadow_addr)) {
+		s8 shadow_first_byte = *(s8 *)shadow_addr;
+		s8 shadow_second_byte = *((s8 *)shadow_addr + 1);
+		s8 last_accessible_byte = (addr + 7) & KASAN_SHADOW_MASK;
+
+		if (likely(IS_ALIGNED(addr, 8)))
+			return unlikely(shadow_first_byte != 0);
+
+		return unlikely(shadow_first_byte
+				|| (last_accessible_byte
+					>= shadow_second_byte));
+	}
+	return false;
+}
+
+static __always_inline bool memory_is_poisoned_16(unsigned long addr) /* FIXME: This shit doesn't work yet */
+{
+	u32 *shadow_addr = (u32 *)kasan_mem_to_shadow(addr);
+	if (unlikely(*shadow_addr)) {
+		u16 shadow_first_byte = *(u16 *)shadow_addr;
+		s8 shadow_last_byte = *((s8 *)shadow_addr + 2);
+		s8 last_accessible_byte = (addr + 15) & KASAN_SHADOW_MASK;
+
+		if (likely(IS_ALIGNED(addr, 8)))
+			return unlikely(shadow_first_byte);
+
+		return unlikely((shadow_first_byte || shadow_last_byte)
+				|| (last_accessible_byte
+					> shadow_last_byte));
+	}
+	return false;
+}
+
+static __always_inline unsigned long bytes_is_zero(unsigned long start,
+					size_t size)
+{
+	while (size) {
+		if (unlikely(*(u8 *)start))
+			return start;
+		start++;
+		size--;
+	}
 	return 0;
 }
+
+static __always_inline unsigned long memory_is_zero(unsigned long start,
+						unsigned long end)
+{
+	unsigned int prefix = start % 8;
+	unsigned int words;
+	unsigned long ret;
+
+	if (end - start <= 16)
+		return bytes_is_zero(start, end - start);
+
+	if (prefix) {
+		ret = bytes_is_zero(start, prefix);
+		if (unlikely(ret))
+			return ret;
+		start += prefix;
+	}
+
+	words = (end - start) / 8;
+	while (words) {
+		if (unlikely(*(u64 *)start))
+			return bytes_is_zero(start, 8);
+		start += 8;
+		words--;
+	}
+
+	return bytes_is_zero(start, (end - start) % 8);
+}
+
+static __always_inline bool memory_is_poisoned_n(unsigned long addr,
+						size_t size)
+{
+	unsigned long ret;
+
+	ret = memory_is_zero(kasan_mem_to_shadow(addr),
+			kasan_mem_to_shadow(addr + size - 1) + 1);
+
+	if (unlikely(ret)) {
+		unsigned long last = addr + size - 1;
+		s8 *last_shadow = (s8 *)kasan_mem_to_shadow(last);
+
+		if (unlikely(ret != (unsigned long)last_shadow ||
+				((last & KASAN_SHADOW_MASK) >= *last_shadow)))
+			return true;
+	}
+	return false;
+}
+
+static __always_inline unsigned long memory_is_poisoned_n2(unsigned long addr,
+							size_t size)
+{
+	unsigned long last = addr + size - 1;
+	s8 *shadow = (s8 *)kasan_mem_to_shadow(addr);
+	s8 last_byte, shadow_value;
+
+	if (unlikely((addr ^ last) & ~KASAN_SHADOW_MASK)) {
+		s8 *first_shadow = shadow;
+		s8 *last_shadow = (s8 *)kasan_mem_to_shadow(last);
+
+		while (likely(*shadow == 0) && shadow < last_shadow)
+			shadow++;
+
+		if (unlikely(shadow != last_shadow))
+			return true;
+	}
+
+	last_byte = last & KASAN_SHADOW_MASK;
+	shadow_value = *shadow;
+	if (likely(shadow_value == 0 || shadow_value > last_byte))
+		return false;
+
+	return true;
+}
+
+static __always_inline bool memory_is_poisoned(unsigned long addr, size_t size)
+{
+	if (__builtin_constant_p(size))
+		switch (size) {
+		case 1:
+			return memory_is_poisoned_1(addr);
+		case 2:
+			return memory_is_poisoned_2(addr);
+		case 4:
+			return memory_is_poisoned_4(addr);
+		case 8:
+			return memory_is_poisoned_8(addr);
+		case 16:
+			return memory_is_poisoned_16(addr);
+		default:
+			BUILD_BUG();
+		}
+	else
+		return memory_is_poisoned_n(addr, size);
+
+}
+
 
 static __always_inline void check_memory_region(unsigned long addr,
 						size_t size, bool write)
 {
-	unsigned long access_addr;
 	struct access_info info;
 
 	if (unlikely(size == 0))
@@ -98,12 +266,10 @@ static __always_inline void check_memory_region(unsigned long addr,
 		kasan_report_user_access(&info);
 		return;
 	}
-
-	access_addr = memory_is_poisoned(addr, size);
-	if (likely(access_addr == 0))
+	if (likely(!memory_is_poisoned(addr, size)))
 		return;
 
-	info.access_addr = access_addr;
+	info.access_addr = addr;
 	info.access_size = size;
 	info.is_write = write;
 	info.ip = _RET_IP_;
