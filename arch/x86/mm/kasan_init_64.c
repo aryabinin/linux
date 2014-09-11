@@ -33,7 +33,7 @@ void __init kasan_map_zero_shadow(pgd_t *pgd)
 	unsigned long end = KASAN_SHADOW_END;
 
 	for (i = pgd_index(start); start < end; i++) {
-		pgd[i] = __pgd(__pa(zero_pud) | __PAGE_KERNEL_RO);
+		pgd[i] = __pgd(__pa_nodebug(zero_pud) | __PAGE_KERNEL_RO);
 		start += PGDIR_SIZE;
 	}
 }
