@@ -388,7 +388,7 @@ LDFLAGS_MODULE  =
 CFLAGS_KERNEL	=
 AFLAGS_KERNEL	=
 CFLAGS_GCOV	= -fprofile-arcs -ftest-coverage
-CFLAGS_KASAN	= -fsanitize=kernel-address
+CFLAGS_KASAN	= $(call cc-option, -fsanitize=kernel-address)
 
 
 # Use USERINCLUDE when you must reference the UAPI directories only.
@@ -765,7 +765,7 @@ KBUILD_CFLAGS += $(call cc-option, -fno-inline-functions-called-once)
 endif
 
 ifdef CONFIG_KASAN
-  ifeq ($(call cc-option, $(CFLAGS_KASAN)),)
+  ifeq ($(CFLAGS_KASAN),)
     $(warning Cannot use CONFIG_KASAN: \
 	      -fsanitize=kernel-address not supported by compiler)
   endif
