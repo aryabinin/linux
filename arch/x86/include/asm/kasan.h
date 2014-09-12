@@ -1,8 +1,8 @@
 #ifndef _ASM_X86_KASAN_H
 #define _ASM_X86_KASAN_H
 
-#define KASAN_SHADOW_START	0xffff800000000000UL
-#define KASAN_SHADOW_END	0xffff900000000000UL
+#define KASAN_SHADOW_START	0xffffd90000000000UL
+#define KASAN_SHADOW_END	0xffffe90000000000UL
 
 #ifndef __ASSEMBLY__
 extern pte_t zero_pte[];

@@ -30,7 +30,7 @@ struct kernel_symbol
 };
 
 #ifdef MODULE
-extern struct module __this_module;
+extern struct module __this_module __attribute__((section(".gnu.linkonce.this_module")));
 #define THIS_MODULE (&__this_module)
 #else
 #define THIS_MODULE ((struct module *)0)

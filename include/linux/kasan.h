@@ -14,7 +14,7 @@ struct page;
 
 static inline unsigned long kasan_mem_to_shadow(unsigned long addr)
 {
-	return ((addr - KASAN_SHADOW_START) >> KASAN_SHADOW_SCALE_SHIFT)
+	return ((addr - 0xffff800000000000UL) >> KASAN_SHADOW_SCALE_SHIFT)
 		+ KASAN_SHADOW_START;
 }
 

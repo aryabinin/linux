@@ -1,12 +1,20 @@
-#include <linux/mm.h>
 #include <linux/bootmem.h>
-#include <linux/sched.h>
 #include <linux/kasan.h>
+#include <linux/mm.h>
+#include <linux/sched.h>
+#include <linux/vmalloc.h>
 
 #include <asm/tlbflush.h>
 
 extern pgd_t early_level4_pgt[PTRS_PER_PGD];
 extern struct range pfn_mapped[E820_X_MAX];
+
+struct vm_struct kasan_vm = {
+	.addr = (void *)KASAN_SHADOW_START,
+	.size = (16UL << 40),
+	.flags = VM_MAP,
+};
+
 
 static int __init map_range(struct range *range)
 {
@@ -44,6 +52,7 @@ void __init kasan_map_shadow(void)
 {
 	int i;
 
+	vm_area_add_early(&kasan_vm);
 	memcpy(early_level4_pgt, init_level4_pgt, 4096);
 	load_cr3(early_level4_pgt);
 
