@@ -389,8 +389,10 @@ void load_percpu_segment(int cpu)
 #ifdef CONFIG_X86_32
 	loadsegment(fs, __KERNEL_PERCPU);
 #else
+	wrmsrl(MSR_KERNEL_GS_BASE, (unsigned long)per_cpu(irq_stack_union.gs_base, cpu));
 	loadsegment(gs, 0);
-	wrmsrl(MSR_GS_BASE, (unsigned long)per_cpu(irq_stack_union.gs_base, cpu));
+	native_swapgs();
+	wrmsrl(MSR_KERNEL_GS_BASE, 0);
 #endif
 	load_stack_canary_segment();
 }
@@ -1323,7 +1325,6 @@ void cpu_init(void)
 	syscall_init();
 
 	wrmsrl(MSR_FS_BASE, 0);
-	wrmsrl(MSR_KERNEL_GS_BASE, 0);
 	barrier();
 
 	x86_configure_nx();
