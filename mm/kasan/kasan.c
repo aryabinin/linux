@@ -266,6 +266,7 @@ static __always_inline void check_memory_region(unsigned long addr,
 		kasan_report_user_access(&info);
 		return;
 	}
+
 	if (likely(!memory_is_poisoned(addr, size)))
 		return;
 

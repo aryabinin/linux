@@ -160,7 +160,7 @@ static void print_shadow_for_address(unsigned long addr)
 
 		if (row_is_guilty(aligned_shadow, shadow))
 			pr_err("%*c\n",
-				shadow_pointer_offset(aligned_shadow, shadow),
+				shadow_pointer_offset(aligned_shadow, shadow) + 1,
 				'^');
 
 		aligned_shadow += SHADOW_BYTES_PER_ROW;
