@@ -192,6 +192,163 @@ void kasan_report_error(struct access_info *info)
 	spin_unlock_irqrestore(&report_lock, flags);
 }
 
+void __asan_report_recover_load4(unsigned long addr)
+{
+	struct access_info info;
+
+	info.access_addr = addr;
+	info.access_size = 4;
+	info.is_write = false;
+	info.ip = _RET_IP_;
+
+	kasan_report_error(&info);
+}
+EXPORT_SYMBOL(__asan_report_recover_load4);
+
+void __asan_report_recover_load1(unsigned long addr)
+{
+	struct access_info info;
+
+	info.access_addr = addr;
+	info.access_size = 1;
+	info.is_write = false;
+	info.ip = _RET_IP_;
+
+	kasan_report_error(&info);
+}
+EXPORT_SYMBOL(__asan_report_recover_load1);
+
+
+void __asan_report_recover_load2(unsigned long addr)
+{
+	struct access_info info;
+
+	info.access_addr = addr;
+	info.access_size = 2;
+	info.is_write = false;
+	info.ip = _RET_IP_;
+
+	kasan_report_error(&info);
+}
+EXPORT_SYMBOL(__asan_report_recover_load2);
+
+void __asan_report_recover_load8(unsigned long addr)
+{
+	struct access_info info;
+
+	info.access_addr = addr;
+	info.access_size = 8;
+	info.is_write = false;
+	info.ip = _RET_IP_;
+
+	kasan_report_error(&info);
+}
+EXPORT_SYMBOL(__asan_report_recover_load8);
+
+void __asan_report_recover_load16(unsigned long addr)
+{
+	struct access_info info;
+
+	info.access_addr = addr;
+	info.access_size = 16;
+	info.is_write = false;
+	info.ip = _RET_IP_;
+
+	kasan_report_error(&info);
+}
+EXPORT_SYMBOL(__asan_report_recover_load16);
+
+void __asan_report_recover_load_n(unsigned long addr, size_t size)
+{
+	struct access_info info;
+
+	info.access_addr = addr;
+	info.access_size = size;
+	info.is_write = false;
+	info.ip = _RET_IP_;
+
+	kasan_report_error(&info);
+}
+EXPORT_SYMBOL(__asan_report_recover_load_n);
+
+void __asan_report_recover_store1(unsigned long addr)
+{
+	struct access_info info;
+
+	info.access_addr = addr;
+	info.access_size = 1;
+	info.is_write = true;
+	info.ip = _RET_IP_;
+
+	kasan_report_error(&info);
+}
+EXPORT_SYMBOL(__asan_report_recover_store1);
+
+void __asan_report_recover_store2(unsigned long addr)
+{
+	struct access_info info;
+
+	info.access_addr = addr;
+	info.access_size = 2;
+	info.is_write = true;
+	info.ip = _RET_IP_;
+
+	kasan_report_error(&info);
+}
+EXPORT_SYMBOL(__asan_report_recover_store2);
+
+void __asan_report_recover_store4(unsigned long addr)
+{
+	struct access_info info;
+
+	info.access_addr = addr;
+	info.access_size = 4;
+	info.is_write = true;
+	info.ip = _RET_IP_;
+
+	kasan_report_error(&info);
+}
+EXPORT_SYMBOL(__asan_report_recover_store4);
+
+void __asan_report_recover_store8(unsigned long addr)
+{
+	struct access_info info;
+
+	info.access_addr = addr;
+	info.access_size = 2;
+	info.is_write = true;
+	info.ip = _RET_IP_;
+
+	kasan_report_error(&info);
+}
+EXPORT_SYMBOL(__asan_report_recover_store8);
+
+void __asan_report_recover_store16(unsigned long addr)
+{
+	struct access_info info;
+
+	info.access_addr = addr;
+	info.access_size = 16;
+	info.is_write = true;
+	info.ip = _RET_IP_;
+
+	kasan_report_error(&info);
+}
+EXPORT_SYMBOL(__asan_report_recover_store16);
+
+void __asan_report_recover_store_n(unsigned long addr, size_t size)
+{
+	struct access_info info;
+
+	info.access_addr = addr;
+	info.access_size = size;
+	info.is_write = true;
+	info.ip = _RET_IP_;
+
+	kasan_report_error(&info);
+}
+EXPORT_SYMBOL(__asan_report_recover_store_n);
+
 void kasan_report_user_access(struct access_info *info)
 {
 	unsigned long flags;
