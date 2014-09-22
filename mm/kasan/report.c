@@ -199,3 +199,40 @@ void kasan_report_user_access(struct access_info *info)
 		"=================================\n");
 	spin_unlock_irqrestore(&report_lock, flags);
 }
+
+#define DEFINE_ASAN_REPORT_LOAD(size)                     \
+void __asan_report_recover_load##size(unsigned long addr) \
+{                                                         \
+	kasan_report(addr, size, false);                  \
+}                                                         \
+EXPORT_SYMBOL(__asan_report_recover_load##size)
+
+#define DEFINE_ASAN_REPORT_STORE(size)                     \
+void __asan_report_recover_store##size(unsigned long addr) \
+{                                                          \
+	kasan_report(addr, size, true);                    \
+}                                                          \
+EXPORT_SYMBOL(__asan_report_recover_store##size)
+
+DEFINE_ASAN_REPORT_LOAD(1);
+DEFINE_ASAN_REPORT_LOAD(2);
+DEFINE_ASAN_REPORT_LOAD(4);
+DEFINE_ASAN_REPORT_LOAD(8);
+DEFINE_ASAN_REPORT_LOAD(16);
+DEFINE_ASAN_REPORT_STORE(1);
+DEFINE_ASAN_REPORT_STORE(2);
+DEFINE_ASAN_REPORT_STORE(4);
+DEFINE_ASAN_REPORT_STORE(8);
+DEFINE_ASAN_REPORT_STORE(16);
+
+void __asan_report_recover_load_n(unsigned long addr, size_t size)
+{
+	kasan_report(addr, size, false);
+}
+EXPORT_SYMBOL(__asan_report_recover_load_n);
+
+void __asan_report_recover_store_n(unsigned long addr, size_t size)
+{
+	kasan_report(addr, size, true);
+}
+EXPORT_SYMBOL(__asan_report_recover_store_n);
