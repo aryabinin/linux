@@ -8,6 +8,7 @@
 #include <asm/cacheflush.h>
 #include <asm/e820.h>
 #include <asm/init.h>
+#include <asm/kasan.h>
 #include <asm/page.h>
 #include <asm/page_types.h>
 #include <asm/sections.h>
@@ -685,5 +686,7 @@ void __init zone_sizes_init(void)
 #endif
 
 	free_area_init_nodes(max_zone_pfns);
+
+	kasan_map_shadow();
 }
 
