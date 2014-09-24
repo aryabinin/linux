@@ -5,6 +5,7 @@ if HAVE_ARCH_KASAN
 
 config KASAN
 	bool "AddressSanitizer: runtime memory debugger"
+	depends on !MEMORY_HOTPLUG
 	help
 	  Enables address sanitizer - runtime memory debugger,
 	  designed to find out-of-bounds accesses and use-after-free bugs.
@@ -15,6 +16,7 @@ config KASAN
 
 config KASAN_SHADOW_OFFSET
 	hex
+	default 0xdfffe90000000000 if X86_64
 
 choice
 	prompt "Instrumentation type"
