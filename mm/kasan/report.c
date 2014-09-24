@@ -55,8 +55,11 @@ static void print_error_description(struct access_info *info)
 
 	switch (shadow_val) {
 	case KASAN_FREE_PAGE:
+	case KASAN_KMALLOC_FREE:
 		bug_type = "use after free";
 		break;
+	case KASAN_PAGE_REDZONE:
+	case KASAN_KMALLOC_REDZONE:
 	case 0 ... KASAN_SHADOW_SCALE_SIZE - 1:
 		bug_type = "out of bounds access";
 		break;
@@ -80,6 +83,24 @@ static void print_address_description(struct access_info *info)
 	if ((addr >= PAGE_OFFSET) &&
 		(addr < (unsigned long)high_memory)) {
 		struct page *page = virt_to_head_page((void *)addr);
+
+		if (PageSlab(page)) {
+			void *object;
+			struct kmem_cache *cache = page->slab_cache;
+			void *last_object;
+
+			object = virt_to_obj(cache, page_address(page),
+					(void *)info->access_addr);
+			last_object = page_address(page) +
+				page->objects * cache->size;
+
+			if (unlikely(object > last_object))
+				object = last_object; /* we hit into padding */
+
+			object_err(cache, page, object,
+				"kasan: bad access detected");
+			return;
+		}
 		dump_page(page, "kasan: bad access detected");
 	}
 
