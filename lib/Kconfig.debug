@@ -646,6 +646,21 @@ config DEBUG_SHIRQ
 	  Drivers ought to be able to handle interrupts coming in at those
 	  points; some don't and need to be caught.
 
+config UBSAN
+	bool "Undefined behaviour sanity checker"
+	help
+	  This option enables undefined behaviour sanity checker
+	  Compiler instruments various computations to detect undefined
+	  behaviour at runtime.
+
+config UBSAN_SANITIZE_ALL
+	bool "Enable instrumentation for the entire kernel"
+	depends on UBSAN
+	depends on X86 || ARM
+	help
+	  This option acitivates instrumentation for the entire kernel
+
+
 menu "Debug Lockups and Hangs"
 
 config LOCKUP_DETECTOR
