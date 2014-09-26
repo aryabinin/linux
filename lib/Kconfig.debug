@@ -646,6 +646,29 @@ config DEBUG_SHIRQ
 	  Drivers ought to be able to handle interrupts coming in at those
 	  points; some don't and need to be caught.
 
+config HAVE_ARCH_UBSAN_SANTIZE_ALL
+	bool
+
+config UBSAN
+	bool "Undefined behaviour sanity checker"
+	help
+	  This option enables undefined behaviour sanity checker
+	  Compile-time instrumentataion used to detect various undefined
+	  behaviours in runtime. Different kinds of checks could be enabled
+	  via boot parameter ubsan_handle (see: Documentation/ubsan.txt).
+	  (TODO: write docs).
+
+config UBSAN_SANITIZE_ALL
+	bool "Enable instrumentation for the entire kernel"
+	depends on UBSAN
+	depends on HAVE_ARCH_UBSAN_SANTIZE_ALL
+	default y
+	help
+	  This option acitivates instrumentation for the entire kernel.
+	  If you don't enable this option, you have to explicitly specify
+	  UBSAN_SANITIZE := y for the files/directories you want to check for UB.
+
+
 menu "Debug Lockups and Hangs"
 
 config LOCKUP_DETECTOR
