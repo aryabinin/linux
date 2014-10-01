@@ -57,11 +57,11 @@ static inline ktime_t ktime_set(const s64 secs, const unsigned long nsecs)
 
 /* Subtract two ktime_t variables. rem = lhs -rhs: */
 #define ktime_sub(lhs, rhs) \
-		({ (ktime_t){ .tv64 = (lhs).tv64 - (rhs).tv64 }; })
+		({ (ktime_t){ .tv64 = (u64)(lhs).tv64 - (u64)(rhs).tv64 }; })
 
 /* Add two ktime_t variables. res = lhs + rhs: */
 #define ktime_add(lhs, rhs) \
-		({ (ktime_t){ .tv64 = (lhs).tv64 + (rhs).tv64 }; })
+		({ (ktime_t){ .tv64 = (u64)(lhs).tv64 + (u64)(rhs).tv64 }; })
 
 /*
  * Add a ktime_t variable and a scalar nanosecond value.
