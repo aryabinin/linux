@@ -444,7 +444,7 @@ static void *mb_find_buddy(struct ext4_buddy *e4b, int order, int *max)
 	BUG_ON(e4b->bd_bitmap == e4b->bd_buddy);
 	BUG_ON(max == NULL);
 
-	if (order > e4b->bd_blkbits + 1) {
+	if (order >= e4b->bd_blkbits + 1) {
 		*max = 0;
 		return NULL;
 	}
@@ -554,7 +554,7 @@ static int __mb_check_buddy(struct ext4_buddy *e4b, char *file,
 				const char *function, int line)
 {
 	struct super_block *sb = e4b->bd_sb;
-	int order = e4b->bd_blkbits + 1;
+	int order = e4b->bd_blkbits;
 	int max;
 	int max2;
 	int i;
@@ -708,7 +708,7 @@ mb_set_largest_free_order(struct super_block *sb, struct ext4_group_info *grp)
 
 	grp->bb_largest_free_order = -1; /* uninit */
 
-	bits = sb->s_blocksize_bits + 1;
+	bits = sb->s_blocksize_bits;
 	for (i = bits; i >= 0; i--) {
 		if (grp->bb_counters[i] > 0) {
 			grp->bb_largest_free_order = i;
@@ -1254,7 +1254,7 @@ static int mb_find_order_for_block(struct ext4_buddy *e4b, int block)
 	BUG_ON(block >= (1 << (e4b->bd_blkbits + 3)));
 
 	bb = e4b->bd_buddy;
-	while (order <= e4b->bd_blkbits + 1) {
+	while (order < e4b->bd_blkbits + 1) {
 		block = block >> 1;
 		if (!mb_test_bit(block, bb)) {
 			/* this block is part of buddy of order 'order' */
@@ -1880,7 +1880,7 @@ void ext4_mb_simple_scan_group(struct ext4_allocation_context *ac,
 	int max;
 
 	BUG_ON(ac->ac_2order <= 0);
-	for (i = ac->ac_2order; i <= sb->s_blocksize_bits + 1; i++) {
+	for (i = ac->ac_2order; i < sb->s_blocksize_bits + 1; i++) {
 		if (grp->bb_counters[i] == 0)
 			continue;
 
@@ -2285,7 +2285,7 @@ static int ext4_mb_seq_groups_show(struct seq_file *seq, void *v)
 	seq_printf(seq, "#%-5u: %-5u %-5u %-5u [", group, sg.info.bb_free,
 			sg.info.bb_fragments, sg.info.bb_first_free);
 	for (i = 0; i <= 13; i++)
-		seq_printf(seq, " %-5u", i <= sb->s_blocksize_bits + 1 ?
+		seq_printf(seq, " %-5u", i < sb->s_blocksize_bits + 1 ?
 				sg.info.bb_counters[i] : 0);
 	seq_printf(seq, " ]\n");
 
@@ -2557,7 +2557,7 @@ int ext4_mb_init(struct super_block *sb)
 	unsigned max;
 	int ret;
 
-	i = (sb->s_blocksize_bits + 2) * sizeof(*sbi->s_mb_offsets);
+	i = (sb->s_blocksize_bits + 1) * sizeof(*sbi->s_mb_offsets);
 
 	sbi->s_mb_offsets = kmalloc(i, GFP_KERNEL);
 	if (sbi->s_mb_offsets == NULL) {
@@ -2565,7 +2565,7 @@ int ext4_mb_init(struct super_block *sb)
 		goto out;
 	}
 
-	i = (sb->s_blocksize_bits + 2) * sizeof(*sbi->s_mb_maxs);
+	i = (sb->s_blocksize_bits + 1) * sizeof(*sbi->s_mb_maxs);
 	sbi->s_mb_maxs = kmalloc(i, GFP_KERNEL);
 	if (sbi->s_mb_maxs == NULL) {
 		ret = -ENOMEM;
@@ -2589,7 +2589,7 @@ int ext4_mb_init(struct super_block *sb)
 		offset += 1 << (sb->s_blocksize_bits - i);
 		max = max >> 1;
 		i++;
-	} while (i <= sb->s_blocksize_bits + 1);
+	} while (i < sb->s_blocksize_bits + 1);
 
 	spin_lock_init(&sbi->s_md_lock);
 	spin_lock_init(&sbi->s_bal_lock);
