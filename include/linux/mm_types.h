@@ -56,6 +56,7 @@ struct page {
 						 * see PAGE_MAPPING_ANON below.
 						 */
 		void *s_mem;			/* slab first object */
+		void *quarantine;		/* slub quarantine list */
 	};
 
 	/* Second double word */
