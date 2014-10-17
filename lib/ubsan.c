@@ -16,22 +16,40 @@ const char *type_check_kinds[] = {
 	"downcast of"
 };
 
-#define SUM_OVERFLOW                (1 << 0)
-#define SUB_OVERFLOW                (1 << 1)
-#define MUL_OVERFLOW                (1 << 2)
-#define NEG_OVERFLOW                (1 << 3)
-#define DIVREM_OVERFLOW             (1 << 4)
-#define TYPE_MISMATCH               (1 << 5)
-#define NONNULL_ARG                 (1 << 6)
-#define NONNULL_RET                 (1 << 7)
-#define VLA_BOUND                   (1 << 8)
-#define OUT_OF_BOUNDS               (1 << 9)
-#define SHIFT_OUT_OF_BOUNDS        (1 << 10)
-#define INVALID_LOAD               (1 << 11)
-#define FUNC_TYPE_MISMATCH         (1 << 12)
-#define DEFAULT_HANDLERS     ((1 << 13) - 1)
+enum {
+	SUM_OVERFLOW,
+	SUB_OVERFLOW,
+	MUL_OVERFLOW,
+	NEG_OVERFLOW,
+	DIVREM_OVERFLOW,
+	TYPE_MISMATCH,
+	NONNULL_ARG,
+	NONNULL_RET,
+	VLA_BOUND,
+	OUT_OF_BOUNDS,
+	SHIFT_OUT_OF_BOUNDS,
+	INVALID_LOAD,
+	FUNC_TYPE_MISMATCH,
+	HANDLERS_END,
+};
 
-static unsigned int ubsan_handle = UBSAN_DEFAULT_HANDLERS;
+/* By default enable everything except type mismatch handler */
+static unsigned long ubsan_handle = GEN_MASK(HANDLERS_END, 0) & ~BIT_MASK(TYPE_MISMATCH);
+
+static void enable_handler(unsigned int handler)
+{
+	set_bit(handler, &ubsan_handle);
+}
+
+static void disable_handler(unsigned int handler)
+{
+	clear_bit(handler, &ubsan_handle);
+}
+
+static bool handler_enabled(unsigned int handler)
+{
+	return test_bit(handler, &ubsan_handle);
+}
 
 #define REPORTED_BIT 31
 #define COLUMN_MASK (~(1U << REPORTED_BIT))
@@ -147,8 +165,8 @@ static void handle_overflow(struct overflow_data *data, unsigned long lhs,
 {
 
 	struct type_descriptor *type = data->type;
-	char lhs_val_str[40];
-	char rhs_val_str[40];
+	char lhs_val_str[60];
+	char rhs_val_str[60];
 
 	if (current->in_ubsan)
 		return;
@@ -176,7 +194,7 @@ void __ubsan_handle_add_overflow(struct overflow_data *data,
 				unsigned long rhs)
 {
 
-	if (ubsan_handle & SUM_OVERFLOW)
+	if (handler_enabled(SUM_OVERFLOW))
 		handle_overflow(data, lhs, rhs, '+');
 }
 EXPORT_SYMBOL(__ubsan_handle_add_overflow);
@@ -185,7 +203,7 @@ void __ubsan_handle_sub_overflow(struct overflow_data *data,
 				unsigned long lhs,
 				unsigned long rhs)
 {
-	if (ubsan_handle & SUB_OVERFLOW)
+	if (handler_enabled(SUB_OVERFLOW))
 		handle_overflow(data, lhs, rhs, '-');
 }
 EXPORT_SYMBOL(__ubsan_handle_sub_overflow);
@@ -194,7 +212,7 @@ void __ubsan_handle_mul_overflow(struct overflow_data *data,
 				unsigned long lhs,
 				unsigned long rhs)
 {
-	if (ubsan_handle & MUL_OVERFLOW)
+	if (handler_enabled(MUL_OVERFLOW))
 		handle_overflow(data, lhs, rhs, '*');
 }
 EXPORT_SYMBOL(__ubsan_handle_mul_overflow);
@@ -203,9 +221,9 @@ void __ubsan_handle_negate_overflow(struct overflow_data *data,
 				unsigned long old_val)
 {
 
-	char old_val_str[40];
+	char old_val_str[60];
 
-	if (!(ubsan_handle & NEG_OVERFLOW))
+	if (!handler_enabled(NEG_OVERFLOW))
 		return;
 
 	if (current->in_ubsan)
@@ -235,9 +253,9 @@ void __ubsan_handle_divrem_overflow(struct overflow_data *data,
 				unsigned long lhs,
 				unsigned long rhs)
 {
-	char rhs_val_str[40];
+	char rhs_val_str[60];
 
-	if (!(ubsan_handle & DIVREM_OVERFLOW))
+	if (!handler_enabled(DIVREM_OVERFLOW))
 		return;
 
 	if (current->in_ubsan)
@@ -264,7 +282,7 @@ void __ubsan_handle_type_mismatch(struct type_mismatch_data *data,
 				unsigned long ptr)
 {
 
-	if (!(ubsan_handle & TYPE_MISMATCH))
+	if (!handler_enabled(TYPE_MISMATCH))
 		return;
 
 	if (current->in_ubsan)
@@ -297,7 +315,7 @@ EXPORT_SYMBOL(__ubsan_handle_type_mismatch);
 void __ubsan_handle_nonnull_arg(struct nonnull_arg_data *data)
 {
 
-	if (!(ubsan_handle & NONNULL_ARG))
+	if (!handler_enabled(NONNULL_ARG))
 		return;
 
 	if (current->in_ubsan)
@@ -321,7 +339,7 @@ EXPORT_SYMBOL(__ubsan_handle_nonnull_arg);
 
 void __ubsan_handle_nonnull_return(struct nonnull_return_data *data)
 {
-	if (!(ubsan_handle & NONNULL_RET))
+	if (!handler_enabled(NONNULL_RET))
 		return;
 
 	if (current->in_ubsan)
@@ -345,9 +363,9 @@ EXPORT_SYMBOL(__ubsan_handle_nonnull_return);
 void __ubsan_handle_vla_bound_not_positive(struct vla_bound_data *data,
 					unsigned long bound)
 {
-	char bound_str[40];
+	char bound_str[60];
 
-	if (!(ubsan_handle & VLA_BOUND))
+	if (!handler_enabled(VLA_BOUND))
 		return;
 
 	if (current->in_ubsan)
@@ -370,9 +388,9 @@ EXPORT_SYMBOL(__ubsan_handle_vla_bound_not_positive);
 void __ubsan_handle_out_of_bounds(struct out_of_bounds_data *data,
 				unsigned long index)
 {
-	char index_str[40];
+	char index_str[60];
 
-	if (!(ubsan_handle & OUT_OF_BOUNDS))
+	if (!handler_enabled(OUT_OF_BOUNDS))
 		return;
 
 	if (current->in_ubsan)
@@ -398,10 +416,10 @@ void __ubsan_handle_shift_out_of_bounds(
 {
 	struct type_descriptor *rhs_type = data->rhs_type;
 	struct type_descriptor *lhs_type = data->lhs_type;
-	char rhs_str[40];
-	char lhs_str[40];
+	char rhs_str[60];
+	char lhs_str[60];
 
-	if (!(ubsan_handle & SHIFT_OUT_OF_BOUNDS))
+	if (!handler_enabled(SHIFT_OUT_OF_BOUNDS))
 		return;
 
 	if (current->in_ubsan)
@@ -440,9 +458,9 @@ EXPORT_SYMBOL(__ubsan_handle_shift_out_of_bounds);
 void __ubsan_handle_load_invalid_value(struct invalid_value_data *data,
 				unsigned long val)
 {
-	char val_str[40];
+	char val_str[60];
 
-	if (!(ubsan_handle & INVALID_LOAD))
+	if (!handler_enabled(INVALID_LOAD))
 		return;
 
 	if (current->in_ubsan)
@@ -467,7 +485,7 @@ void __ubsan_handle_function_type_mismatch(struct func_type_mismatch_data *data,
 					unsigned long function)
 {
 
-	if (!(ubsan_handle & FUNC_TYPE_MISMATCH))
+	if (!handler_enabled(FUNC_TYPE_MISMATCH))
 		return;
 
 	if (current->in_ubsan)
@@ -485,38 +503,41 @@ void __ubsan_handle_function_type_mismatch(struct func_type_mismatch_data *data,
 }
 EXPORT_SYMBOL(__ubsan_handle_function_type_mismatch);
 
-static int __init setup_ubsan_handlers(char *str)
+static int __init enable_ubsan_handlers(char *str)
 {
 	for (; *str; str++) {
 		switch (tolower(*str)) {
 		case 'o':
-			ubsan_handle &= ~(SUM_OVERFLOW | SUB_OVERFLOW |
-				MUL_OVERFLOW | NEG_OVERFLOW | DIVREM_OVERFLOW);
+			enable_handler(SUM_OVERFLOW);
+			enable_handler(SUB_OVERFLOW);
+			enable_handler(MUL_OVERFLOW);
+			enable_handler(NEG_OVERFLOW);
+			enable_handler(DIVREM_OVERFLOW);
 			break;
 		case 't':
-			ubsan_handle &= ~TYPE_MISMATCH;
+			enable_handler(TYPE_MISMATCH);
 			break;
 		case 'n':
-			ubsan_handle &= ~(NONNULL_ARG | NONNULL_RET);
+			enable_handler(NONNULL_ARG);
+			enable_handler(NONNULL_RET);
 			break;
 		case 'v':
-			ubsan_handle &= ~VLA_BOUND;
+			enable_handler(VLA_BOUND);
 			break;
 		case 'b':
-			ubsan_handle &= ~OUT_OF_BOUNDS;
+			enable_handler(OUT_OF_BOUNDS);
 			break;
 		case 's':
-			ubsan_handle &= ~SHIFT_OUT_OF_BOUNDS;
+			enable_handler(SHIFT_OUT_OF_BOUNDS);
 			break;
 		case 'i':
-			ubsan_handle &= ~INVALID_LOAD;
+			enable_handler(INVALID_LOAD);
 			break;
 		case 'f':
-			ubsan_handle &= ~FUNC_TYPE_MISMATCH;
+			enable_handler(FUNC_TYPE_MISMATCH);
 			break;
 		default:
-			pr_err("ubsan_handle: skipping unknown option '%c'\n",
-				*str);
+			pr_err("skipping unknown option '%c'\n", *str);
 			break;
 		}
 	}
@@ -524,4 +545,47 @@ static int __init setup_ubsan_handlers(char *str)
 	return 0;
 }
 
-early_param("ubsan_handle", setup_ubsan_handlers);
+static int __init disable_ubsan_handlers(char *str)
+{
+	for (; *str; str++) {
+		switch (tolower(*str)) {
+		case 'o':
+			disable_handler(SUM_OVERFLOW);
+			disable_handler(SUB_OVERFLOW);
+			disable_handler(MUL_OVERFLOW);
+			disable_handler(NEG_OVERFLOW);
+			disable_handler(DIVREM_OVERFLOW);
+			break;
+		case 't':
+			disable_handler(TYPE_MISMATCH);
+			break;
+		case 'n':
+			disable_handler(NONNULL_ARG);
+			disable_handler(NONNULL_RET);
+			break;
+		case 'v':
+			disable_handler(VLA_BOUND);
+			break;
+		case 'b':
+			disable_handler(OUT_OF_BOUNDS);
+			break;
+		case 's':
+			disable_handler(SHIFT_OUT_OF_BOUNDS);
+			break;
+		case 'i':
+			disable_handler(INVALID_LOAD);
+			break;
+		case 'f':
+			disable_handler(FUNC_TYPE_MISMATCH);
+			break;
+		default:
+			pr_err("skipping unknown option '%c'\n", *str);
+			break;
+		}
+	}
+
+	return 0;
+}
+
+early_param("ubsan_disable", disable_ubsan_handlers);
+early_param("ubsan_enable", enable_ubsan_handlers);
