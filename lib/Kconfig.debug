@@ -656,7 +656,7 @@ config UBSAN
 config UBSAN_SANITIZE_ALL
 	bool "Enable instrumentation for the entire kernel"
 	depends on UBSAN
-	depends on X86 || ARM
+	depends on HAVE_ARCH_UBSAN_SANTIZE_ALL
 	help
 	  This option acitivates instrumentation for the entire kernel
 
