@@ -21,6 +21,8 @@
 
 #include "internals.h"
 
+struct kmem_cache *irqaction_cachep;
+
 #ifdef CONFIG_IRQ_FORCED_THREADING
 __read_mostly bool force_irqthreads;
 
@@ -1409,7 +1411,7 @@ void free_irq(unsigned int irq, void *dev_id)
 #endif
 
 	chip_bus_lock(desc);
-	kfree(__free_irq(irq, dev_id));
+	kmem_cache_free(irqaction_cachep, __free_irq(irq, dev_id));
 	chip_bus_sync_unlock(desc);
 }
 EXPORT_SYMBOL(free_irq);
@@ -1487,7 +1489,7 @@ int request_threaded_irq(unsigned int irq, irq_handler_t handler,
 		handler = irq_default_primary_handler;
 	}
 
-	action = kzalloc(sizeof(struct irqaction), GFP_KERNEL);
+	action = kmem_cache_zalloc(irqaction_cachep, GFP_KERNEL);
 	if (!action)
 		return -ENOMEM;
 
@@ -1502,7 +1504,7 @@ int request_threaded_irq(unsigned int irq, irq_handler_t handler,
 	chip_bus_sync_unlock(desc);
 
 	if (retval)
-		kfree(action);
+		kmem_cache_free(irqaction_cachep, action);
 
 #ifdef CONFIG_DEBUG_SHIRQ_FIXME
 	if (!retval && (irqflags & IRQF_SHARED)) {
@@ -1683,7 +1685,7 @@ void free_percpu_irq(unsigned int irq, void __percpu *dev_id)
 		return;
 
 	chip_bus_lock(desc);
-	kfree(__free_percpu_irq(irq, dev_id));
+	kmem_cache_free(irqaction_cachep, __free_percpu_irq(irq, dev_id));
 	chip_bus_sync_unlock(desc);
 }
 
@@ -1738,7 +1740,7 @@ int request_percpu_irq(unsigned int irq, irq_handler_t handler,
 	    !irq_settings_is_per_cpu_devid(desc))
 		return -EINVAL;
 
-	action = kzalloc(sizeof(struct irqaction), GFP_KERNEL);
+	action = kmem_cache_zalloc(irqaction_cachep, GFP_KERNEL);
 	if (!action)
 		return -ENOMEM;
 
@@ -1752,7 +1754,7 @@ int request_percpu_irq(unsigned int irq, irq_handler_t handler,
 	chip_bus_sync_unlock(desc);
 
 	if (retval)
-		kfree(action);
+		kmem_cache_free(irqaction_cachep, action);
 
 	return retval;
 }
