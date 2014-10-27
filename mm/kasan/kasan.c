@@ -334,3 +334,41 @@ EXPORT_SYMBOL(__asan_storeN);
 /* to shut up compiler complaints */
 void __asan_handle_no_return(void) {}
 EXPORT_SYMBOL(__asan_handle_no_return);
+
+
+/* GCC 5.0 has different function names by default */
+void __asan_load1_noabort(unsigned long) __attribute__((alias("__asan_load1")));
+EXPORT_SYMBOL(__asan_load1_noabort);
+
+void __asan_load2_noabort(unsigned long) __attribute__((alias("__asan_load2")));
+EXPORT_SYMBOL(__asan_load2_noabort);
+
+void __asan_load4_noabort(unsigned long) __attribute__((alias("__asan_load4")));
+EXPORT_SYMBOL(__asan_load4_noabort);
+
+void __asan_load8_noabort(unsigned long) __attribute__((alias("__asan_load8")));
+EXPORT_SYMBOL(__asan_load8_noabort);
+
+void __asan_load16_noabort(unsigned long) __attribute__((alias("__asan_load16")));
+EXPORT_SYMBOL(__asan_load16_noabort);
+
+void __asan_loadN_noabort(unsigned long) __attribute__((alias("__asan_loadN")));
+EXPORT_SYMBOL(__asan_loadN_noabort);
+
+void __asan_store1_noabort(unsigned long) __attribute__((alias("__asan_store1")));
+EXPORT_SYMBOL(__asan_store1_noabort);
+
+void __asan_store2_noabort(unsigned long) __attribute__((alias("__asan_store2")));
+EXPORT_SYMBOL(__asan_store2_noabort);
+
+void __asan_store4_noabort(unsigned long) __attribute__((alias("__asan_store4")));
+EXPORT_SYMBOL(__asan_store4_noabort);
+
+void __asan_store8_noabort(unsigned long) __attribute__((alias("__asan_store8")));
+EXPORT_SYMBOL(__asan_store8_noabort);
+
+void __asan_store16_noabort(unsigned long) __attribute__((alias("__asan_store16")));
+EXPORT_SYMBOL(__asan_store16_noabort);
+
+void __asan_storeN_noabort(unsigned long) __attribute__((alias("__asan_storeN")));
+EXPORT_SYMBOL(__asan_storeN_noabort);
