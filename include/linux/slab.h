@@ -574,6 +574,13 @@ static inline void *kmem_cache_zalloc(struct kmem_cache *k, gfp_t flags)
 	return kmem_cache_alloc(k, flags | __GFP_ZERO);
 }
 
+
+static inline void *kmem_cache_zalloc_node(struct kmem_cache *k, gfp_t flags, int node)
+{
+	return kmem_cache_alloc_node(k, flags | __GFP_ZERO, node);
+}
+
+
 /**
  * kzalloc - allocate memory. The memory is set to zero.
  * @size: how many bytes of memory are required.
