@@ -238,7 +238,7 @@ mpi_limb_t mpihelp_rshift(mpi_ptr_t wp, mpi_ptr_t up, mpi_size_t usize,
 #define W_TYPE_SIZE BITS_PER_MPI_LIMB
 typedef mpi_limb_t UWtype;
 typedef unsigned int UHWtype;
-#if defined(__GNUC__)
+#if defined(__GNUC__) && !defined(__clang__)
 typedef unsigned int UQItype __attribute__ ((mode(QI)));
 typedef int SItype __attribute__ ((mode(SI)));
 typedef unsigned int USItype __attribute__ ((mode(SI)));
