@@ -23,6 +23,8 @@
  */
 static struct lock_class_key irq_desc_lock_class;
 
+static struct kmem_cache *irq_desc_cachep;
+
 #if defined(CONFIG_SMP)
 static void __init init_irq_default_affinity(void)
 {
@@ -137,9 +139,10 @@ static struct irq_desc *alloc_desc(int irq, int node, struct module *owner)
 	struct irq_desc *desc;
 	gfp_t gfp = GFP_KERNEL;
 
-	desc = kzalloc_node(sizeof(*desc), gfp, node);
+	desc = kmem_cache_zalloc_node(irq_desc_cachep, gfp, node);
 	if (!desc)
 		return NULL;
+
 	/* allocate based on nr_cpu_ids */
 	desc->kstat_irqs = alloc_percpu(unsigned int);
 	if (!desc->kstat_irqs)
@@ -158,7 +161,7 @@ static struct irq_desc *alloc_desc(int irq, int node, struct module *owner)
 err_kstat:
 	free_percpu(desc->kstat_irqs);
 err_desc:
-	kfree(desc);
+	kmem_cache_free(irq_desc_cachep, desc);
 	return NULL;
 }
 
@@ -174,7 +177,7 @@ static void free_desc(unsigned int irq)
 
 	free_masks(desc);
 	free_percpu(desc->kstat_irqs);
-	kfree(desc);
+	kmem_cache_free(irq_desc_cachep, desc);
 }
 
 static int alloc_descs(unsigned int start, unsigned int cnt, int node,
@@ -219,6 +222,7 @@ int __init early_irq_init(void)
 	init_irq_default_affinity();
 
 	irqaction_cachep = KMEM_CACHE(irqaction, SLAB_PANIC);
+	irq_desc_cachep = KMEM_CACHE(irq_desc, SLAB_PANIC);
 
 	/* Let arch update nr_irqs and return the nr of preallocated irqs */
 	initcnt = arch_probe_nr_irqs();
@@ -562,7 +566,7 @@ int irq_set_percpu_devid(unsigned int irq)
 	if (desc->percpu_enabled)
 		return -EINVAL;
 
-	desc->percpu_enabled = kzalloc(sizeof(*desc->percpu_enabled), GFP_KERNEL);
+	desc->percpu_enabled = kmem_cache_alloc(irq_desc_cachep, GFP_KERNEL);
 
 	if (!desc->percpu_enabled)
 		return -ENOMEM;
