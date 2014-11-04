@@ -759,18 +759,18 @@ endif
 
 ifdef CONFIG_KASAN
 ifdef CONFIG_KASAN_INLINE
-kasan_inline := $(call cc-option, $(CFLAGS_KASAN) \
+  kasan_inline := $(call cc-option, $(CFLAGS_KASAN) \
 			-fasan-shadow-offset=$(CONFIG_KASAN_SHADOW_OFFSET) \
 			--param asan-instrumentation-with-call-threshold=10000)
-
-  ifeq ($(strip $(kasan_inline)),)
+  ifeq ($(kasan_inline),)
     $(warning Cannot use CONFIG_KASAN_INLINE: \
 	      inline instrumentation is not supported by compiler. Trying CONFIG_KASAN_OUTLINE.)
   else
     CFLAGS_KASAN := $(kasan_inline)
+  endif
 
 endif
-  ifeq ($(strip $(CFLAGS_KASAN)),)
+  ifeq ($(CFLAGS_KASAN),)
     $(warning Cannot use CONFIG_KASAN: \
 	      -fsanitize=kernel-address is not supported by compiler)
   endif
