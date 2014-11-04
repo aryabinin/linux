@@ -201,18 +201,18 @@ void kasan_report_user_access(struct access_info *info)
 }
 
 #define DEFINE_ASAN_REPORT_LOAD(size)                     \
-void __asan_report_recover_load##size(unsigned long addr) \
+void __asan_report_load##size_noabort(unsigned long addr) \
 {                                                         \
 	kasan_report(addr, size, false);                  \
 }                                                         \
-EXPORT_SYMBOL(__asan_report_recover_load##size)
+EXPORT_SYMBOL(__asan_report_load##size_noabort)
 
 #define DEFINE_ASAN_REPORT_STORE(size)                     \
-void __asan_report_recover_store##size(unsigned long addr) \
+void __asan_report_store##size_noabort(unsigned long addr) \
 {                                                          \
 	kasan_report(addr, size, true);                    \
 }                                                          \
-EXPORT_SYMBOL(__asan_report_recover_store##size)
+EXPORT_SYMBOL(__asan_report_store##size_noabort)
 
 DEFINE_ASAN_REPORT_LOAD(1);
 DEFINE_ASAN_REPORT_LOAD(2);
@@ -225,14 +225,14 @@ DEFINE_ASAN_REPORT_STORE(4);
 DEFINE_ASAN_REPORT_STORE(8);
 DEFINE_ASAN_REPORT_STORE(16);
 
-void __asan_report_recover_load_n(unsigned long addr, size_t size)
+void __asan_report_load_n_noabort(unsigned long addr, size_t size)
 {
 	kasan_report(addr, size, false);
 }
-EXPORT_SYMBOL(__asan_report_recover_load_n);
+EXPORT_SYMBOL(__asan_report_load_n_noabort);
 
-void __asan_report_recover_store_n(unsigned long addr, size_t size)
+void __asan_report_store_n_noabort(unsigned long addr, size_t size)
 {
 	kasan_report(addr, size, true);
 }
-EXPORT_SYMBOL(__asan_report_recover_store_n);
+EXPORT_SYMBOL(__asan_report_store_n_noabort);
