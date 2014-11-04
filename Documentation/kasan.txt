@@ -5,18 +5,17 @@ Kernel address sanitizer
 ===========
 
 Kernel Address sanitizer (KASan) is a dynamic memory error detector. It provides
-a fast and comprehensive solution for finding use-after-free and out-of-bounds bugs.
+a fast and comprehensive solution for finding use-after-free and out-of-bounds
+bugs.
 
-KASan uses compile-time instrumentation for checking every memory access, therefore you
-will need a special compiler: GCC >= 4.9.2
+KASan uses compile-time instrumentation for checking every memory access,
+therefore you will need a certain version of GCC >= 4.9.2
 
-Currently KASan is supported only for x86_64 architecture and requires kernel
-to be built with SLUB allocator.
+Currently KASan is supported only for x86_64 architecture and requires that the
+kernel be built with the SLUB allocator.
 
 1. Usage
 =========
-
-KASAN requires the kernel to be built with a special compiler (GCC >= 5.0.0).
 
 To enable KASAN configure kernel with:
 
@@ -115,25 +114,26 @@ Memory state around the buggy address:
  c6007180: fc fc fc fc fc fc fc fc fc fc 00 00 00 00 00 00
 ==================================================================
 
+First sections describe slub object where bad access happened.
+See 'SLUB Debug output' section in Documentation/vm/slub.txt for details.
+
 In the last section the report shows memory state around the accessed address.
 Reading this part requires some more understanding of how KASAN works.
 
-Each KASAN_SHADOW_SCALE_SIZE bytes of memory can be marked as addressable,
-partially addressable, freed or they can be part of a redzone.
-If bytes are marked as addressable that means that they belong to some
-allocated memory block and it is possible to read or modify any of these
-bytes. Addressable KASAN_SHADOW_SCALE_SIZE bytes are marked by 0 in the report.
-When only the first N bytes of KASAN_SHADOW_SCALE_SIZE belong to an allocated
-memory block, this bytes are partially addressable and marked by 'N'.
-
-Markers of inaccessible bytes could be found in mm/kasan/kasan.h header:
+Each 8 bytes of memory are encoded in one shadow byte as accessible,
+partially accessible, freed or they can be part of a redzone.
+We use the following encoding for each shadow byte: 0 means that all 8 bytes
+of the corresponding memory region are accessible; number N (1 <= N <= 7) means
+that the first N bytes are accessible, and other (8 - N) bytes are not;
+any negative value indicates that the entire 8-byte word is inaccessible.
+We use different negative values to distinguish between different kinds of
+inaccessible memory (redzones, freed memory) (see mm/kasan/kasan.h).
 
 #define KASAN_FREE_PAGE         0xFF  /* page was freed */
 #define KASAN_PAGE_REDZONE      0xFE  /* redzone for kmalloc_large allocations */
-#define KASAN_SLAB_PADDING      0xFD  /* Slab page redzone, does not belong to any slub object */
+#define KASAN_SLAB_PADDING      0xFD  /* Slab page padding, does not belong to any slub object */
 #define KASAN_KMALLOC_REDZONE   0xFC  /* redzone inside slub object */
 #define KASAN_KMALLOC_FREE      0xFB  /* object was freed (kmem_cache_free/kfree) */
-#define KASAN_SLAB_FREE         0xFA  /* free slab page */
 #define KASAN_SHADOW_GAP        0xF9  /* address belongs to shadow memory */
 
 In the report above the arrows point to the shadow byte 03, which means that the
@@ -145,14 +145,15 @@ accessed address is partially addressable.
 
 From a high level, our approach to memory error detection is similar to that
 of kmemcheck: use shadow memory to record whether each byte of memory is safe
-to access, and use compile-time instrumentation to check shadow on each memory
-access.
+to access, and use compile-time instrumentation to check shadow memory on each
+memory access.
 
-AddressSanitizer dedicates 1/8 of kernel memory to its shadow
-memory (e.g. 16TB to cover 128TB on x86_64) and uses direct mapping with a
-scale and offset to translate a memory address to its corresponding shadow address.
+AddressSanitizer dedicates 1/8 of kernel memory to its shadow memory
+(e.g. 16TB to cover 128TB on x86_64) and uses direct mapping with a scale and
+offset to translate a memory address to its corresponding shadow address.
 
-Here is the function witch translate an address to its corresponding shadow address:
+Here is the function witch translate an address to its corresponding shadow
+address:
 
 unsigned long kasan_mem_to_shadow(unsigned long addr)
 {
@@ -161,14 +162,6 @@ unsigned long kasan_mem_to_shadow(unsigned long addr)
 
 where KASAN_SHADOW_SCALE_SHIFT = 3.
 
-Each shadow byte corresponds to 8 bytes of the main memory. We use the
-following encoding for each shadow byte: 0 means that all 8 bytes of the
-corresponding memory region are addressable; k (1 <= k <= 7) means that
-the first k bytes are addressable, and other (8 - k) bytes are not;
-any negative value indicates that the entire 8-byte word is inaccessible.
-We use different negative values to distinguish between different kinds of
-inaccessible memory (redzones, freed memory) (see mm/kasan/kasan.h).
-
-Poisoning or unpoisoning a byte in the main memory means writing some special
-value into the corresponding shadow memory. This value indicates whether the
-byte is addressable or not.
+Compile-time instrumentation used for checking memory accesses. Compiler inserts
+function calls (__asan_load*(addr), __asan_store*(addr)) before each memory
+access of size 1, 2, 4, 8 or 16.
