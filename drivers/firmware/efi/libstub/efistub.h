@@ -39,4 +39,8 @@ efi_status_t allocate_new_fdt_and_exit_boot(efi_system_table_t *sys_table,
 
 void *get_fdt(efi_system_table_t *sys_table);
 
+#undef memcpy
+#undef memset
+#undef memmove
+
 #endif
