@@ -382,7 +382,7 @@ LDFLAGS_MODULE  =
 CFLAGS_KERNEL	=
 AFLAGS_KERNEL	=
 CFLAGS_GCOV	= -fprofile-arcs -ftest-coverage
-CFLAGS_KASAN	= $(call cc-option, -fsanitize=kernel-address)
+CFLAGS_KASAN	= $(call cc-option, -fsanitize=kernel-address --param asan-stack=1 --param asan-globals=1)
 
 # Use USERINCLUDE when you must reference the UAPI directories only.
 USERINCLUDE    := \
@@ -720,7 +720,7 @@ KBUILD_CFLAGS	+= -fomit-frame-pointer
 endif
 endif
 
-KBUILD_CFLAGS   += $(call cc-option, -fno-var-tracking-assignments)
+#KBUILD_CFLAGS   += $(call cc-option, -fno-var-tracking-assignments)
 
 ifdef CONFIG_DEBUG_INFO
 ifdef CONFIG_DEBUG_INFO_SPLIT
@@ -759,6 +759,8 @@ KBUILD_CFLAGS += $(call cc-option, -fno-inline-functions-called-once)
 endif
 
 ifdef CONFIG_KASAN
+CFLAGS_KASAN := $(call cc-option, $(CFLAGS_KASAN) -fasan-shadow-offset=$(CONFIG_KASAN_SHADOW_OFFSET))
+
 ifdef CONFIG_KASAN_INLINE
   kasan_inline := $(call cc-option, $(CFLAGS_KASAN) \
 			-fasan-shadow-offset=$(CONFIG_KASAN_SHADOW_OFFSET) \

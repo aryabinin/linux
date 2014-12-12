@@ -528,11 +528,11 @@ NEXT_PAGE(zero_pud)
 	FILL(zero_pmd - __START_KERNEL_map + __PAGE_KERNEL_RO, 512)
 
 NEXT_PAGE(poisoned_pte)
-	FILL(poisoned_page - __START_KERNEL_map + __PAGE_KERNEL_RO, 512)
+	FILL(poisoned_page - __START_KERNEL_map + _KERNPG_TABLE, 512)
 NEXT_PAGE(poisoned_pmd)
-	FILL(poisoned_pte - __START_KERNEL_map + __PAGE_KERNEL_RO, 512)
+	FILL(poisoned_pte - __START_KERNEL_map + _KERNPG_TABLE, 512)
 NEXT_PAGE(poisoned_pud)
-	FILL(poisoned_pmd - __START_KERNEL_map + __PAGE_KERNEL_RO, 512)
+	FILL(poisoned_pmd - __START_KERNEL_map + _KERNPG_TABLE, 512)
 
 #undef FILL
 #endif

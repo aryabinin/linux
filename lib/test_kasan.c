@@ -233,7 +233,23 @@ static noinline void __init kmem_cache_oob(void)
 	kmem_cache_destroy(cache);
 }
 
-int __init kmalloc_tests_init(void)
+static noinline void __init kasan_stack_oob(void)
+{
+	int b[10];
+	pr_info("out-of");
+	(void)(*(volatile int *)(b+10));
+}
+
+static int a[10];
+
+static noinline __init void kasan_globals_oob(void)
+{
+	int *ptr = a;
+	pr_info("kasan_globals\n");
+	a[0] = *(ptr+10);
+}
+
+static int __init kmalloc_tests_init(void)
 {
 	kmalloc_oob_right();
 	kmalloc_oob_left();
@@ -247,6 +263,8 @@ int __init kmalloc_tests_init(void)
 	kmalloc_uaf_memset();
 	kmalloc_uaf2();
 	kmem_cache_oob();
+	kasan_stack_oob();
+	kasan_globals_oob();
 	return -EAGAIN;
 }
 

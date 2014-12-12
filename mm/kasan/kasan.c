@@ -21,6 +21,7 @@
 #include <linux/kernel.h>
 #include <linux/memblock.h>
 #include <linux/mm.h>
+#include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
@@ -246,6 +247,94 @@ static __always_inline void check_memory_region(unsigned long addr,
 		return;
 
 	kasan_report(addr, size, write);
+}
+
+static void free_shadow(struct page **pages, void *addr, size_t size)
+{
+	size_t shadow_size = round_up(size >> KASAN_SHADOW_SCALE_SHIFT,
+				PAGE_SIZE);
+	size_t nr_pages = shadow_size >> PAGE_SHIFT;
+	unsigned long shadow_addr = kasan_mem_to_shadow((unsigned long)addr);
+	int i;
+
+	if (pages == NULL)
+		return;
+
+	unmap_kernel_range_noflush(shadow_addr,	shadow_size);
+
+	for (i = 0; i < nr_pages; i++)
+		__free_page(pages[i]);
+
+	kfree(pages);
+}
+
+struct page **alloc_shadow(void *addr, size_t size)
+{
+	size_t shadow_size = round_up(size >> KASAN_SHADOW_SCALE_SHIFT,
+				PAGE_SIZE);
+	size_t nr_pages = shadow_size >> PAGE_SHIFT;
+	unsigned long shadow_addr = kasan_mem_to_shadow((unsigned long)addr);
+	struct page **pages;
+	int i;
+
+	pages = kmalloc(nr_pages * sizeof(pages), GFP_KERNEL);
+	if (!pages)
+		return NULL;
+
+	for (i = 0; i < nr_pages; i++) {
+		pages[i] = alloc_page(GFP_KERNEL | __GFP_HIGHMEM | __GFP_COLD);
+		if (!pages[i])
+			goto err;
+
+		if (!PageHighMem(pages[i]))
+			kasan_poison_shadow(page_address(pages[i]),
+					PAGE_SIZE, KASAN_SHADOW_GAP);
+	}
+
+	if (map_kernel_range_noflush(shadow_addr,
+					shadow_size,
+					PAGE_KERNEL, pages) < 0)
+		goto err;
+
+	kasan_unpoison_shadow(addr, size);
+	return pages;
+err:
+	for (--i; i >= 0; i--)
+		__free_page(pages[i]);
+
+	kfree(pages);
+	return NULL;
+
+}
+
+int kasan_module_alloc(struct module *module)
+{
+	struct page **core_shadow_pages = alloc_shadow(module->module_core,
+						module->core_size);
+	struct page **init_shadow_pages = alloc_shadow(module->module_init,
+						module->init_size);
+
+	if (init_shadow_pages == NULL || core_shadow_pages == NULL) {
+		return -ENOMEM;
+	}
+
+	module->init_shadow_pages = init_shadow_pages;
+	module->core_shadow_pages = core_shadow_pages;
+	return 0;
+}
+
+void kasan_module_free_init(struct module *module)
+{
+	free_shadow(module->init_shadow_pages, module->module_init,
+		module->init_size);
+	module->init_shadow_pages = NULL;
+}
+void kasan_module_free(struct module *module)
+{
+	free_shadow(module->init_shadow_pages, module->module_init,
+		module->init_size);
+	free_shadow(module->core_shadow_pages, module->module_core,
+		module->core_size);
 }
 
 void __asan_loadN(unsigned long addr, size_t size);
@@ -507,3 +596,29 @@ EXPORT_SYMBOL(__asan_store16_noabort);
 __attribute__((alias("__asan_storeN")))
 void __asan_storeN_noabort(unsigned long);
 EXPORT_SYMBOL(__asan_storeN_noabort);
+
+static void register_global(struct __asan_global *global)
+{
+	size_t aligned_size = round_up(global->__size, KASAN_SHADOW_SCALE_SIZE);
+
+	kasan_unpoison_shadow(global->__beg, global->__size);
+
+	kasan_poison_shadow(global->__beg + aligned_size,
+		global->__size_with_redzone - aligned_size,
+		KASAN_GLOBAL_REDZONE);
+}
+
+void __asan_register_globals(struct __asan_global *globals, size_t size)
+{
+	int i;
+
+	for (i = 0; i < size; i++) {
+		register_global(&globals[i]);
+	}
+}
+EXPORT_SYMBOL(__asan_register_globals);
+
+void __asan_unregister_globals(struct __asan_global *globals, size_t size)
+{
+}
+EXPORT_SYMBOL(__asan_unregister_globals);

@@ -56,6 +56,7 @@
 #include <linux/async.h>
 #include <linux/percpu.h>
 #include <linux/kmemleak.h>
+#include <linux/kasan.h>
 #include <linux/jump_label.h>
 #include <linux/pfn.h>
 #include <linux/bsearch.h>
@@ -1852,6 +1853,7 @@ static void free_module(struct module *mod)
 	unset_module_core_ro_nx(mod);
 	module_free(mod, mod->module_core);
 
+	kasan_module_free(mod);
 #ifdef CONFIG_MPU
 	update_protections(current->mm);
 #endif
@@ -2760,7 +2762,7 @@ static int move_module(struct module *mod, struct load_info *info)
 {
 	int i;
 	void *ptr;
-
+	
 	/* Do the allocs. */
 	ptr = module_alloc_update_bounds(mod->core_size);
 	/*
@@ -2772,7 +2774,7 @@ static int move_module(struct module *mod, struct load_info *info)
 	if (!ptr)
 		return -ENOMEM;
 
-	memset(ptr, 0, mod->core_size);
+
 	mod->module_core = ptr;
 
 	if (mod->init_size) {
@@ -2788,10 +2790,18 @@ static int move_module(struct module *mod, struct load_info *info)
 			module_free(mod, mod->module_core);
 			return -ENOMEM;
 		}
-		memset(ptr, 0, mod->init_size);
 		mod->module_init = ptr;
 	} else
 		mod->module_init = NULL;
+
+	kasan_module_alloc(mod);
+
+	if (mod->module_init)
+		memset(mod->module_init, 0, mod->init_size);
+
+
+	memset(mod->module_core, 0, mod->core_size);
+
 
 	/* Transfer each section which specifies SHF_ALLOC */
 	pr_debug("final section addresses:\n");
@@ -2930,6 +2940,7 @@ static struct module *layout_and_allocate(struct load_info *info, int flags)
 static void module_deallocate(struct module *mod, struct load_info *info)
 {
 	percpu_modfree(mod);
+	kasan_module_free(mod);
 	module_free(mod, mod->module_init);
 	module_free(mod, mod->module_core);
 }
@@ -3055,6 +3066,10 @@ static int do_init_module(struct module *mod)
 	mod->strtab = mod->core_strtab;
 #endif
 	unset_module_init_ro_nx(mod);
+	extern void kasan_module_free_init(struct module *module);
+
+	kasan_module_free_init(mod);
+
 	module_free(mod, mod->module_init);
 	mod->module_init = NULL;
 	mod->init_size = 0;

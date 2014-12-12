@@ -83,13 +83,20 @@ static unsigned long int get_module_load_offset(void)
 
 void *module_alloc(unsigned long size)
 {
+	void *p;
+	extern struct page **alloc_shadow(void *addr, size_t size);
+
 	if (PAGE_ALIGN(size) > MODULES_LEN)
 		return NULL;
-	return __vmalloc_node_range(size, 1,
+
+	p = __vmalloc_node_range(size, 8*PAGE_SIZE,
 				    MODULES_VADDR + get_module_load_offset(),
 				    MODULES_END, GFP_KERNEL | __GFP_HIGHMEM,
 				    PAGE_KERNEL_EXEC, NUMA_NO_NODE,
 				    __builtin_return_address(0));
+	if (p)
+		alloc_shadow(p, size);
+	return p;
 }
 
 #ifdef CONFIG_X86_32

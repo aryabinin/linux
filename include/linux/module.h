@@ -361,6 +361,10 @@ struct module {
 	ctor_fn_t *ctors;
 	unsigned int num_ctors;
 #endif
+#ifdef CONFIG_KASAN
+	struct page **init_shadow_pages;
+	struct page **core_shadow_pages;
+#endif
 };
 #ifndef MODULE_ARCH_INIT
 #define MODULE_ARCH_INIT {}

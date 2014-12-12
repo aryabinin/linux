@@ -1176,6 +1176,7 @@ void __init setup_arch(char **cmdline_p)
 #endif
 
 	x86_init.paging.pagetable_init();
+	early_ioremap_reset();
 
 	kasan_init();
 

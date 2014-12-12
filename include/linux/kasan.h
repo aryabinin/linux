@@ -44,6 +44,9 @@ void kasan_krealloc(const void *object, size_t new_size);
 void kasan_slab_alloc(struct kmem_cache *s, void *object);
 void kasan_slab_free(struct kmem_cache *s, void *object);
 
+int kasan_module_alloc(struct module *module);
+void kasan_module_free(struct module *module);
+
 #else /* CONFIG_KASAN */
 
 static inline void kasan_unpoison_shadow(const void *address, size_t size) {}
@@ -64,6 +67,9 @@ static inline void kasan_krealloc(const void *object, size_t new_size) {}
 
 static inline void kasan_slab_alloc(struct kmem_cache *s, void *object) {}
 static inline void kasan_slab_free(struct kmem_cache *s, void *object) {}
+
+static inline int kasan_module_alloc(struct module *module) { return 0; }
+static inline void kasan_module_free(struct module *module) {}
 
 #endif /* CONFIG_KASAN */
 

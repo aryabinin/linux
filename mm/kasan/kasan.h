@@ -11,7 +11,14 @@
 #define KASAN_SLAB_PADDING      0xFD  /* Slab page padding, does not belong to any slub object */
 #define KASAN_KMALLOC_REDZONE   0xFC  /* redzone inside slub object */
 #define KASAN_KMALLOC_FREE      0xFB  /* object was freed (kmem_cache_free/kfree) */
+#define KASAN_GLOBAL_REDZONE    0xFA  /* redzone for global variable */
 #define KASAN_SHADOW_GAP        0xF9  /* address belongs to shadow memory */
+
+/* Stack redzones */
+#define KASAN_STACK_LEFT        0xF1
+#define KASAN_STACK_MID         0xF2
+#define KASAN_STACK_RIGHT       0xF3
+#define KASAN_STACK_PARTIAL     0xF4
 
 struct access_info {
 	unsigned long access_addr;
@@ -19,6 +26,37 @@ struct access_info {
 	size_t access_size;
 	bool is_write;
 	unsigned long ip;
+};
+
+struct __asan_global_source_location {
+	const char *filename;
+	int line_no;
+	int column_no;
+};
+
+struct __asan_global {
+	// Address of the beginning of the global variable.
+	const void *__beg;
+
+	// Initial size of the global variable.
+	size_t __size;
+
+	// Size of the global variable + size of the red zone.  This
+	//   size is 32 bytes aligned.
+	size_t __size_with_redzone;
+
+	// Name of the global variable.
+	const void *__name;
+
+	// Name of the module where the global variable is declared.
+	const void *__module_name;
+
+	// 1 if it has dynamic initialization, 0 otherwise.
+	unsigned long __has_dynamic_init;
+
+	// A pointer to struct that contains source location, could be NULL.
+	struct __asan_global_source_location *__location;
+
 };
 
 void kasan_report_error(struct access_info *info);
@@ -43,11 +81,13 @@ static __always_inline void kasan_report(unsigned long addr,
 	if (likely(!kasan_enabled()))
 		return;
 
+	kasan_disable_local();
 	info.access_addr = addr;
 	info.access_size = size;
 	info.is_write = is_write;
 	info.ip = _RET_IP_;
 	kasan_report_error(&info);
+	kasan_enable_local();
 }
 
 
