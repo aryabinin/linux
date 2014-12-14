@@ -1375,36 +1375,37 @@ static void xen_flush_tlb_others(const struct cpumask *cpus,
 				 struct mm_struct *mm, unsigned long start,
 				 unsigned long end)
 {
-	struct {
-		struct mmuext_op op;
-#ifdef CONFIG_SMP
-		DECLARE_BITMAP(mask, num_processors);
-#else
-		DECLARE_BITMAP(mask, NR_CPUS);
-#endif
-	} *args;
 	struct multicall_space mcs;
+	struct mmuext_op *op;
+	struct cpumask *mask;
 
 	trace_xen_mmu_flush_tlb_others(cpus, mm, start, end);
 
 	if (cpumask_empty(cpus))
 		return;		/* nothing to do */
 
-	mcs = xen_mc_entry(sizeof(*args));
-	args = mcs.args;
-	args->op.arg2.vcpumask = to_cpumask(args->mask);
+#ifdef CONFIG_SMP
+	mcs = xen_mc_entry(sizeof(struct mmuext_op) + BITS_TO_LONGS(num_processors)*sizeof(unsigned long));
+#else
+	mcs = xen_mc_entry(sizeof(struct mmuext_op) + BITS_TO_LONGS(NR_CPUS)*sizeof(unsigned long));
+#endif
+	/* Extract fields */
+	op = mcs.args;
+	mask = to_cpumask(mcs.args + sizeof(struct mmuext_op));
+
+	op->arg2.vcpumask = mask;
 
 	/* Remove us, and any offline CPUS. */
-	cpumask_and(to_cpumask(args->mask), cpus, cpu_online_mask);
-	cpumask_clear_cpu(smp_processor_id(), to_cpumask(args->mask));
+	cpumask_and(mask, cpus, cpu_online_mask);
+	cpumask_clear_cpu(smp_processor_id(), mask);
 
-	args->op.cmd = MMUEXT_TLB_FLUSH_MULTI;
+	op->cmd = MMUEXT_TLB_FLUSH_MULTI;
 	if (end != TLB_FLUSH_ALL && (end - start) <= PAGE_SIZE) {
-		args->op.cmd = MMUEXT_INVLPG_MULTI;
-		args->op.arg1.linear_addr = start;
+		op->cmd = MMUEXT_INVLPG_MULTI;
+		op->arg1.linear_addr = start;
 	}
 
-	MULTI_mmuext_op(mcs.mc, &args->op, 1, NULL, DOMID_SELF);
+	MULTI_mmuext_op(mcs.mc, op, 1, NULL, DOMID_SELF);
 
 	xen_mc_issue(PARAVIRT_LAZY_MMU);
 }
