@@ -68,6 +68,12 @@ static void print_error_description(struct access_info *info)
 	case KASAN_SHADOW_GAP:
 		bug_type = "wild memory access";
 		break;
+	case KASAN_STACK_LEFT:
+	case KASAN_STACK_MID:
+	case KASAN_STACK_RIGHT:
+	case KASAN_STACK_PARTIAL:
+		bug_type = "out-of-bounds on stack";
+		break;
 	}
 
 	pr_err("BUG: AddressSanitizer: %s in %pS at addr %p\n",
@@ -84,10 +90,9 @@ static void print_address_description(struct access_info *info)
 	struct kmem_cache *cache;
 	u8 shadow_val = *(u8 *)kasan_mem_to_shadow(info->first_bad_addr);
 
-	page = virt_to_head_page((void *)info->access_addr);
-
 	switch (shadow_val) {
 	case KASAN_SLAB_PADDING:
+		page = virt_to_head_page((void *)info->access_addr);
 		cache = page->slab_cache;
 		slab_err(cache, page, "access to slab redzone");
 		dump_stack();
@@ -95,6 +100,7 @@ static void print_address_description(struct access_info *info)
 	case KASAN_KMALLOC_FREE:
 	case KASAN_KMALLOC_REDZONE:
 	case 1 ... KASAN_SHADOW_SCALE_SIZE - 1:
+		page = virt_to_head_page((void *)info->access_addr);
 		if (PageSlab(page)) {
 			void *object;
 			void *slab_page = page_address(page);
@@ -107,7 +113,14 @@ static void print_address_description(struct access_info *info)
 		}
 	case KASAN_PAGE_REDZONE:
 	case KASAN_FREE_PAGE:
+		page = virt_to_head_page((void *)info->access_addr);
 		dump_page(page, "kasan error");
+		dump_stack();
+		break;
+	case KASAN_STACK_LEFT:
+	case KASAN_STACK_MID:
+	case KASAN_STACK_RIGHT:
+	case KASAN_STACK_PARTIAL:
 		dump_stack();
 		break;
 	case KASAN_SHADOW_GAP:
