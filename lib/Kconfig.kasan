@@ -51,4 +51,12 @@ config KASAN_INLINE
 
 endchoice
 
+config KASAN_STACK
+	bool "Stack instrumentation"
+	depends on KASAN
+	default y
+	help
+	  Enables stack instrumentation. Compiler enlarges each variable
+	  on stack and {TODO: write more}
+
 endif
