@@ -59,4 +59,14 @@ config KASAN_STACK
 	  Enables stack instrumentation. Compiler enlarges each variable
 	  on stack and {TODO: write more}
 
+config KASAN_GLOBALS
+	bool "Globals instrumentation"
+	depends on KASAN
+	select CONSTRUCTORS
+	default y
+	help
+	  Enables instrumentation of global variables. Practically this
+	  means that we able to detect out-of-bounds accesses to global
+	  variables.
+
 endif
