@@ -7,11 +7,12 @@ struct kmem_cache;
 struct page;
 
 #ifdef CONFIG_KASAN
-#include <asm/kasan.h>
-#include <linux/sched.h>
 
 #define KASAN_SHADOW_SCALE_SHIFT 3
 #define KASAN_SHADOW_OFFSET _AC(CONFIG_KASAN_SHADOW_OFFSET, UL)
+
+#include <asm/kasan.h>
+#include <linux/sched.h>
 
 static inline unsigned long kasan_mem_to_shadow(unsigned long addr)
 {
