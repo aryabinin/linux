@@ -86,52 +86,46 @@ static void print_error_description(struct access_info *info)
 		info->access_size, current->comm, task_pid_nr(current));
 }
 
+static inline bool kernel_or_module_addr(unsigned long addr)
+{
+	return (addr >= (unsigned long)_stext && addr < (unsigned long)_end)
+		|| is_module_address(addr);
+}
+
+static inline bool init_task_stack_addr(unsigned long addr)
+{
+	return addr >= (unsigned long)&init_thread_union.stack &&
+		(addr <= (unsigned long)&init_thread_union.stack +
+			sizeof(init_thread_union.stack));
+}
+
 static void print_address_description(struct access_info *info)
 {
 	struct page *page;
-	struct kmem_cache *cache;
-	u8 shadow_val = *(u8 *)kasan_mem_to_shadow(info->first_bad_addr);
+	unsigned long addr = info->access_addr;
 
-	switch (shadow_val) {
-	case KASAN_SLAB_PADDING:
-		page = virt_to_head_page((void *)info->access_addr);
-		cache = page->slab_cache;
-		slab_err(cache, page, "access to slab redzone");
-		dump_stack();
-		break;
-	case KASAN_KMALLOC_FREE:
-	case KASAN_KMALLOC_REDZONE:
-	case 1 ... KASAN_SHADOW_SCALE_SIZE - 1:
-		page = virt_to_head_page((void *)info->access_addr);
+	if (virt_addr_valid(addr)) {
+		page = virt_to_head_page((void *)addr);
 		if (PageSlab(page)) {
 			void *object;
-			void *slab_page = page_address(page);
+			struct kmem_cache *cache = page->slab_cache;
 
-			cache = page->slab_cache;
-			object = virt_to_obj(cache, slab_page,
+			object = virt_to_obj(cache, page_address(page),
 					(void *)info->access_addr);
 			object_err(cache, page, object, "kasan error");
-			break;
+			return;
 		}
-	case KASAN_PAGE_REDZONE:
-	case KASAN_FREE_PAGE:
-		page = virt_to_head_page((void *)info->access_addr);
 		dump_page(page, "kasan error");
 		dump_stack();
-		break;
-	case KASAN_STACK_LEFT:
-	case KASAN_STACK_MID:
-	case KASAN_STACK_RIGHT:
-	case KASAN_STACK_PARTIAL:
-		dump_stack();
-		break;
-	case KASAN_SHADOW_GAP:
-		pr_err("No metainfo is available for this access.\n");
-		dump_stack();
-		break;
-	default:
-		WARN_ON(1);
+		return;
 	}
+
+	if (kernel_or_module_addr(addr)) {
+		if (!init_task_stack_addr(addr))
+			pr_err("Address belongs to variable %pS\n",
+				(void *)addr);
+	}
+	dump_stack();
 }
 
 static bool row_is_guilty(unsigned long row, unsigned long guilty)
