@@ -21,6 +21,7 @@
 #include <linux/kernel.h>
 #include <linux/memblock.h>
 #include <linux/mm.h>
+#include <linux/module.h>
 #include <linux/printk.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
@@ -246,6 +247,26 @@ static __always_inline void check_memory_region(unsigned long addr,
 		return;
 
 	kasan_report(addr, size, write);
+}
+
+int kasan_module_alloc(void *addr, size_t size)
+{
+
+	size_t shadow_size = round_up(size >> KASAN_SHADOW_SCALE_SHIFT,
+				PAGE_SIZE);
+	unsigned long shadow_start = kasan_mem_to_shadow((unsigned long)addr);
+
+	void *ret = __vmalloc_node_range(shadow_size, 1, shadow_start,
+			shadow_start + shadow_size,
+			GFP_KERNEL | __GFP_HIGHMEM | __GFP_ZERO,
+			PAGE_KERNEL, VM_NO_GUARD, NUMA_NO_NODE,
+			__builtin_return_address(0));
+	return ret ? 0 : -ENOMEM;
+}
+
+void kasan_module_free(void *addr)
+{
+	vfree((void *)kasan_mem_to_shadow((unsigned long)addr));
 }
 
 void __asan_loadN(unsigned long addr, size_t size);
@@ -507,3 +528,28 @@ EXPORT_SYMBOL(__asan_store16_noabort);
 __attribute__((alias("__asan_storeN")))
 void __asan_storeN_noabort(unsigned long);
 EXPORT_SYMBOL(__asan_storeN_noabort);
+
+static void register_global(struct __asan_global *global)
+{
+	size_t aligned_size = round_up(global->__size, KASAN_SHADOW_SCALE_SIZE);
+
+	kasan_unpoison_shadow(global->__beg, global->__size);
+
+	kasan_poison_shadow(global->__beg + aligned_size,
+		global->__size_with_redzone - aligned_size,
+		KASAN_GLOBAL_REDZONE);
+}
+
+void __asan_register_globals(struct __asan_global *globals, size_t size)
+{
+	int i;
+
+	for (i = 0; i < size; i++)
+		register_global(&globals[i]);
+}
+EXPORT_SYMBOL(__asan_register_globals);
+
+void __asan_unregister_globals(struct __asan_global *globals, size_t size)
+{
+}
+EXPORT_SYMBOL(__asan_unregister_globals);
