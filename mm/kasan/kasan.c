@@ -528,3 +528,28 @@ EXPORT_SYMBOL(__asan_store16_noabort);
 __attribute__((alias("__asan_storeN")))
 void __asan_storeN_noabort(unsigned long);
 EXPORT_SYMBOL(__asan_storeN_noabort);
+
+static void register_global(struct __asan_global *global)
+{
+	size_t aligned_size = round_up(global->__size, KASAN_SHADOW_SCALE_SIZE);
+
+	kasan_unpoison_shadow(global->__beg, global->__size);
+
+	kasan_poison_shadow(global->__beg + aligned_size,
+		global->__size_with_redzone - aligned_size,
+		KASAN_GLOBAL_REDZONE);
+}
+
+void __asan_register_globals(struct __asan_global *globals, size_t size)
+{
+	int i;
+
+	for (i = 0; i < size; i++)
+		register_global(&globals[i]);
+}
+EXPORT_SYMBOL(__asan_register_globals);
+
+void __asan_unregister_globals(struct __asan_global *globals, size_t size)
+{
+}
+EXPORT_SYMBOL(__asan_unregister_globals);

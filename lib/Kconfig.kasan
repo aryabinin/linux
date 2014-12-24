@@ -51,6 +51,15 @@ config KASAN_STACK
 	  Enables stack instrumentation. Compiler enlarges each variable
 	  on stack and {TODO: write more}
 
+config KASAN_GLOBALS
+	bool "Globals instrumentation"
+	depends on KASAN
+	default y
+	help
+	  Enables instrumentation of global variables. Practically this
+	  means that we able to detect out-of-bounds accesses to global
+	  variables.
+
 config TEST_KASAN
 	tristate "Module for testing kasan for bug detection"
 	depends on m && KASAN
