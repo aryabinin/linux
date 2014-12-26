@@ -54,6 +54,7 @@ config KASAN_STACK
 config KASAN_GLOBALS
 	bool "Globals instrumentation"
 	depends on KASAN
+	select CONSTRUCTORS
 	default y
 	help
 	  Enables instrumentation of global variables. Practically this
