@@ -14,7 +14,6 @@
  */
 
 #include <linux/kernel.h>
-#include <linux/module.h>
 #include <linux/mm.h>
 #include <linux/printk.h>
 #include <linux/sched.h>
@@ -59,6 +58,7 @@ static void print_error_description(struct access_info *info)
 	case KASAN_PAGE_REDZONE:
 	case KASAN_SLAB_PADDING:
 	case KASAN_KMALLOC_REDZONE:
+	case KASAN_GLOBAL_REDZONE:
 	case 0 ... KASAN_SHADOW_SCALE_SIZE - 1:
 		bug_type = "out of bounds access";
 		break;
@@ -85,6 +85,19 @@ static void print_error_description(struct access_info *info)
 		info->access_size, current->comm, task_pid_nr(current));
 }
 
+static inline bool kernel_or_module_addr(unsigned long addr)
+{
+	return (addr >= (unsigned long)_stext && addr < (unsigned long)_end)
+		|| (addr >= MODULES_VADDR  && addr < MODULES_END);
+}
+
+static inline bool init_task_stack_addr(unsigned long addr)
+{
+	return addr >= (unsigned long)&init_thread_union.stack &&
+		(addr <= (unsigned long)&init_thread_union.stack +
+			sizeof(init_thread_union.stack));
+}
+
 static void print_address_description(struct access_info *info)
 {
 	struct page *page;
@@ -106,6 +119,11 @@ static void print_address_description(struct access_info *info)
 		return;
 	}
 
+	if (kernel_or_module_addr(addr)) {
+		if (!init_task_stack_addr(addr))
+			pr_err("Address belongs to variable %pS\n",
+				(void *)addr);
+	}
 	dump_stack();
 }
 
