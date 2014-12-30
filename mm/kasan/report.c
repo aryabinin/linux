@@ -14,6 +14,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/module.h>
 #include <linux/mm.h>
 #include <linux/printk.h>
 #include <linux/sched.h>
@@ -24,6 +25,7 @@
 #include <linux/kasan.h>
 
 #include "kasan.h"
+#include "../slab.h"
 
 /* Shadow layout customization. */
 #define SHADOW_BYTES_PER_BLOCK 1
@@ -54,8 +56,15 @@ static void print_error_description(struct access_info *info)
 	shadow_val = *(u8 *)kasan_mem_to_shadow(info->first_bad_addr);
 
 	switch (shadow_val) {
+	case KASAN_PAGE_REDZONE:
+	case KASAN_SLAB_PADDING:
+	case KASAN_KMALLOC_REDZONE:
 	case 0 ... KASAN_SHADOW_SCALE_SIZE - 1:
 		bug_type = "out of bounds access";
+		break;
+	case KASAN_FREE_PAGE:
+	case KASAN_KMALLOC_FREE:
+		bug_type = "use after free";
 		break;
 	case KASAN_SHADOW_GAP:
 		bug_type = "wild memory access";
@@ -73,18 +82,25 @@ static void print_error_description(struct access_info *info)
 static void print_address_description(struct access_info *info)
 {
 	struct page *page;
-	u8 shadow_val = *(u8 *)kasan_mem_to_shadow(info->first_bad_addr);
+	unsigned long addr = info->access_addr;
 
-	page = virt_to_head_page((void *)info->access_addr);
+	if (virt_addr_valid(addr)) {
+		page = virt_to_head_page((void *)addr);
+		if (PageSlab(page)) {
+			void *object;
+			struct kmem_cache *cache = page->slab_cache;
 
-	switch (shadow_val) {
-	case KASAN_SHADOW_GAP:
-		pr_err("No metainfo is available for this access.\n");
+			object = virt_to_obj(cache, page_address(page),
+					(void *)info->access_addr);
+			object_err(cache, page, object, "kasan error");
+			return;
+		}
+		dump_page(page, "kasan error");
 		dump_stack();
-		break;
-	default:
-		WARN_ON(1);
+		return;
 	}
+
+	dump_stack();
 }
 
 static bool row_is_guilty(unsigned long row, unsigned long guilty)
