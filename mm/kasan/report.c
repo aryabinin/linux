@@ -103,7 +103,7 @@ static void print_address_description(struct access_info *info)
 	struct page *page;
 	unsigned long addr = info->access_addr;
 
-	if (virt_addr_valid(addr)) {
+	if ((addr >= PAGE_OFFSET && addr < high_memory)) {
 		page = virt_to_head_page((void *)addr);
 		if (PageSlab(page)) {
 			void *object;
