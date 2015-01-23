@@ -40,6 +40,12 @@ else
 TEXT_OFFSET := 0x00080000
 endif
 
+# KASAN_SHADOW_OFFSET = VA_START + (1 << (VA_BITS - 3)) - (1 << 61)
+KASAN_SHADOW_OFFSET := $(shell printf "0x%x\n" $$(( \
+			(-1 << $(CONFIG_ARM64_VA_BITS)) \
+			+ (1 << ($(CONFIG_ARM64_VA_BITS) - 3)) \
+			- (1 << (64 - 3)) )) )
+
 export	TEXT_OFFSET GZFLAGS
 
 core-y		+= arch/arm64/kernel/ arch/arm64/mm/
