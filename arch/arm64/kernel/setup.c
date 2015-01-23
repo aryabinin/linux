@@ -352,6 +352,7 @@ static void __init request_standard_resources(void)
 }
 
 u64 __cpu_logical_map[NR_CPUS] = { [0 ... NR_CPUS-1] = INVALID_HWID };
+extern void kasan_mem_init(void);
 
 void __init setup_arch(char **cmdline_p)
 {
@@ -381,6 +382,7 @@ void __init setup_arch(char **cmdline_p)
 	arm64_memblock_init();
 
 	paging_init();
+	kasan_mem_init();
 	request_standard_resources();
 
 	early_ioremap_reset();

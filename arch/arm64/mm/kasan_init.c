@@ -1,0 +1,235 @@
+#include <linux/kasan.h>
+#include <linux/kernel.h>
+#include <linux/memblock.h>
+#include <linux/start_kernel.h>
+
+#include <asm/page.h>
+#include <asm/pgtable.h>
+#include <asm/tlbflush.h>
+
+static char kasan_zero_page[PAGE_SIZE] __aligned(PAGE_SIZE);
+
+static char tmp_page_table[PAGE_SIZE] __aligned(PAGE_SIZE);
+
+
+static pud_t kasan_zero_pud[PTRS_PER_PUD] __aligned(PAGE_SIZE);
+static pmd_t kasan_zero_pmd[PTRS_PER_PMD] __aligned(PAGE_SIZE);
+static pte_t kasan_zero_pte[PTRS_PER_PTE] __aligned(PAGE_SIZE);
+
+static void __init create_pte(void)
+{
+	int i;
+
+	for (i = 0; i < PTRS_PER_PTE; i++)
+		set_pte(&kasan_zero_pte[i], __pte(__pa(kasan_zero_page)
+							| PAGE_KERNEL));
+}
+
+static void __init create_pmd(void)
+{
+	int i;
+
+	for (i = 0; i < PTRS_PER_PMD; i++)
+		set_pmd(&kasan_zero_pmd[i], __pmd(__pa(kasan_zero_pte)
+							| PAGE_KERNEL));
+
+	create_pte();
+}
+
+static void __init create_pud(void)
+{
+	int i;
+
+	for (i = 0; i < PTRS_PER_PUD; i++)
+		set_pud(&kasan_zero_pud[i], __pud(__pa(kasan_zero_pmd)
+							| PAGE_KERNEL));
+
+	create_pmd();
+}
+
+void __init kasan_map_early_shadow(pgd_t *pgd)
+{
+	int i;
+	unsigned long start = KASAN_SHADOW_START;
+	unsigned long end = KASAN_SHADOW_END;
+
+	for (i = pgd_index(start); start < end; i++) {
+		set_pgd(&pgd[i], __pgd(__pa(kasan_zero_pud)
+					| PAGE_KERNEL));
+		start += PGDIR_SIZE;
+	}
+}
+
+
+void __init kasan_init(void)
+{
+	create_pud();
+	kasan_map_early_shadow(swapper_pg_dir);
+	kasan_map_early_shadow(idmap_pg_dir);
+	flush_tlb_all();
+	start_kernel();
+}
+
+static void __init clear_pgds(unsigned long start,
+			unsigned long end)
+{
+	for (; start && start < end; start += PGDIR_SIZE)
+		pgd_clear(pgd_offset_k(start));
+}
+static int __init zero_pte_populate(pmd_t *pmd, unsigned long addr,
+				unsigned long end)
+{
+	pte_t *pte = pte_offset_kernel(pmd, addr);
+
+	while (addr + PAGE_SIZE <= end) {
+		WARN_ON(!pte_none(*pte));
+		set_pte(pte, __pte(__pa(empty_zero_page)
+					| PAGE_KERNEL_RO));
+		addr += PAGE_SIZE;
+		pte = pte_offset_kernel(pmd, addr);
+	}
+	return 0;
+}
+
+static int __init zero_pmd_populate(pud_t *pud, unsigned long addr,
+				unsigned long end)
+{
+	int ret = 0;
+	pmd_t *pmd = pmd_offset(pud, addr);
+
+	while (IS_ALIGNED(addr, PMD_SIZE) && addr + PMD_SIZE <= end) {
+		WARN_ON(!pmd_none(*pmd));
+		set_pmd(pmd, __pmd(__pa(kasan_zero_pte)
+					| PAGE_KERNEL_RO));
+		addr += PMD_SIZE;
+		pmd = pmd_offset(pud, addr);
+	}
+	if (addr < end) {
+		if (pmd_none(*pmd)) {
+			void *p = vmemmap_alloc_block(PAGE_SIZE, NUMA_NO_NODE);
+			if (!p)
+				return -ENOMEM;
+			set_pmd(pmd, __pmd(__pa(p) | PAGE_KERNEL));
+		}
+		ret = zero_pte_populate(pmd, addr, end);
+	}
+	return ret;
+}
+
+
+static int __init zero_pud_populate(pgd_t *pgd, unsigned long addr,
+				unsigned long end)
+{
+	int ret = 0;
+	pud_t *pud = pud_offset(pgd, addr);
+
+	while (IS_ALIGNED(addr, PUD_SIZE) && addr + PUD_SIZE <= end) {
+		WARN_ON(!pud_none(*pud));
+		set_pud(pud, __pud(__pa(kasan_zero_pmd)
+					| PAGE_KERNEL_RO));
+		addr += PUD_SIZE;
+		pud = pud_offset(pgd, addr);
+	}
+
+	if (addr < end) {
+		if (pud_none(*pud)) {
+			void *p = vmemmap_alloc_block(PAGE_SIZE, NUMA_NO_NODE);
+			if (!p)
+				return -ENOMEM;
+			set_pud(pud, __pud(__pa(p) | PAGE_KERNEL));
+		}
+		ret = zero_pmd_populate(pud, addr, end);
+	}
+	return ret;
+}
+
+static int __init zero_pgd_populate(unsigned long addr, unsigned long end)
+{
+	int ret = 0;
+	pgd_t *pgd = pgd_offset_k(addr);
+
+	while (IS_ALIGNED(addr, PGDIR_SIZE) && addr + PGDIR_SIZE <= end) {
+		WARN_ON(!pgd_none(*pgd));
+		set_pgd(pgd, __pgd(__pa(kasan_zero_pud)
+					| PAGE_KERNEL_RO));
+		addr += PGDIR_SIZE;
+		pgd = pgd_offset_k(addr);
+	}
+
+	if (addr < end) {
+		if (pgd_none(*pgd)) {
+			void *p = vmemmap_alloc_block(PAGE_SIZE, NUMA_NO_NODE);
+			if (!p)
+				return -ENOMEM;
+			set_pgd(pgd, __pgd(__pa(p) | PAGE_KERNEL));
+		}
+		ret = zero_pud_populate(pgd, addr, end);
+	}
+	return ret;
+}
+
+
+static void __init populate_zero_shadow(unsigned long start, unsigned long end)
+{
+	if (zero_pgd_populate(start, end))
+		panic("kasan: unable to map zero shadow!");
+}
+
+static inline void cpu_set_reserved_ttbr1(unsigned long ttbr1)
+{
+	asm(
+	"	msr	ttbr1_el1, %0\n"
+	"	isb"
+	:
+	: "r" (ttbr1));
+}
+
+void __init kasan_mem_init(void)
+{
+	struct memblock_region *reg;
+	phys_addr_t limit;
+
+	memcpy(tmp_page_table, swapper_pg_dir, PAGE_SIZE);
+	cpu_set_reserved_ttbr1(__pa(tmp_page_table));
+
+	clear_pgds(kasan_mem_to_shadow(VMALLOC_START), kasan_mem_to_shadow(PAGE_OFFSET));
+	clear_pgds(kasan_mem_to_shadow(PAGE_OFFSET), kasan_mem_to_shadow(-1ULL) + 1);
+
+	populate_zero_shadow(kasan_mem_to_shadow(VMALLOC_START),
+			kasan_mem_to_shadow(MODULES_VADDR));
+
+	if (IS_ENABLED(CONFIG_ARM64_64K_PAGES))
+		limit = PHYS_OFFSET + PMD_SIZE;
+	else
+		limit = PHYS_OFFSET + PUD_SIZE;
+
+	for_each_memblock(memory, reg) {
+		phys_addr_t start = reg->base;
+		phys_addr_t end = start + reg->size;
+
+		if (start >= end)
+			break;
+
+#ifndef CONFIG_ARM64_64K_PAGES
+		/*
+		 * For the first memory bank align the start address and
+		 * current memblock limit to prevent create_mapping() from
+		 * allocating pte page tables from unmapped memory.
+		 * When 64K pages are enabled, the pte page table for the
+		 * first PGDIR_SIZE is already present in swapper_pg_dir.
+		 */
+		if (start < limit)
+			start = ALIGN(start, PMD_SIZE);
+		if (end < limit)
+			limit = end & PMD_MASK;
+#endif
+
+		vmemmap_populate(kasan_mem_to_shadow(__phys_to_virt(start)),
+				kasan_mem_to_shadow(__phys_to_virt(end)),
+				NUMA_NO_NODE);
+
+	}
+	memset(kasan_zero_page, 0, PAGE_SIZE);
+	cpu_set_reserved_ttbr1(__pa(swapper_pg_dir));
+	init_task.kasan_depth = 0;
+}

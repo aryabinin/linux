@@ -18,6 +18,7 @@ config KASAN
 config KASAN_SHADOW_OFFSET
 	hex
 	default 0xdffffc0000000000 if X86_64
+	default 0xdfff200000000000 if ARM64
 
 choice
 	prompt "Instrumentation type"
