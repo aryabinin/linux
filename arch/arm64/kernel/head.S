@@ -465,6 +465,9 @@ __mmap_switched:
 	str	x21, [x5]			// Save FDT pointer
 	str	x24, [x6]			// Save PHYS_OFFSET
 	mov	x29, #0
+#ifdef CONFIG_KASAN
+	b kasan_init
+#endif
 	b	start_kernel
 ENDPROC(__mmap_switched)
 

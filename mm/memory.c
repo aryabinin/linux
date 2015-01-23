@@ -2782,11 +2782,6 @@ static int fault_around_bytes_get(void *data, u64 *val)
  */
 static int fault_around_bytes_set(void *data, u64 val)
 {
-	signed char a = val;
-	signed char b = -a;
-
-	pr_info("a %c, b %c, %llu\n", a,b, -(-0x7fffffffffffffffLL - 1));
-
 	if (val / PAGE_SIZE > PTRS_PER_PTE)
 		return -EINVAL;
 	if (val > PAGE_SIZE)
