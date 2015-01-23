@@ -24,10 +24,18 @@
 #include <linux/compiler.h>
 
 #ifndef CONFIG_ARM64_64K_PAGES
+#ifndef CONFIG_KASAN
 #define THREAD_SIZE_ORDER	2
+#else
+#define THREAD_SIZE_ORDER	3
+#endif
 #endif
 
+#ifndef CONFIG_KASAN
 #define THREAD_SIZE		16384
+#else
+#define THREAD_SIZE		32768
+#endif
 #define THREAD_START_SP		(THREAD_SIZE - 16)
 
 #ifndef __ASSEMBLY__
