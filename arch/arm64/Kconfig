@@ -46,6 +46,7 @@ config ARM64
 	select HAVE_ARCH_AUDITSYSCALL
 	select HAVE_ARCH_BITREVERSE
 	select HAVE_ARCH_JUMP_LABEL
+	select HAVE_ARCH_KASAN if SPARSEMEM_VMEMMAP
 	select HAVE_ARCH_KGDB
 	select HAVE_ARCH_SECCOMP_FILTER
 	select HAVE_ARCH_TRACEHOOK
@@ -121,6 +122,22 @@ config GENERIC_CSUM
 
 config GENERIC_CALIBRATE_DELAY
 	def_bool y
+
+config KASAN_SHADOW_OFFSET
+	hex
+	depends on KASAN
+	default 0xdfff200000000000 if ARM64_VA_BITS_48
+	default 0xdffffc8000000000 if ARM64_VA_BITS_42
+	default 0xdfffff9000000000 if ARM64_VA_BITS_39
+	help
+	  This value used to address to corresponding shadow address
+	  by the following formula:
+	      shadow_addr = (address >> 3) + KASAN_SHADOW_OFFSET;
+
+	  (1 << 61) shadow addresses - [KASAN_SHADOW_OFFSET,KASAN_SHADOW_END]
+	  cover all 64-bits of virtual addresses. So KASAN_SHADOW_OFFSET
+	  should satisfy the following equation:
+	      KASAN_SHADOW_OFFSET = KASAN_SHADOW_END - (1ULL << 61)
 
 config ZONE_DMA
 	def_bool y
