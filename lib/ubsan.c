@@ -39,11 +39,11 @@ enum {
  * misaligned accesses
  */
 static unsigned long ubsan_handle = GENMASK(HANDLERS_END, 0) &
-	~(BIT_MASK(SUM_OVERFLOW) | BIT_MASK(SUB_OVERFLOW) |
+	~(
 #ifdef CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS
-		BIT_MASK(ALIGNMENT) |
+		BIT_MASK(ALIGNMENT)
 #endif
-		BIT_MASK(MUL_OVERFLOW));
+);
 
 #define REPORTED_BIT 31
 
@@ -443,16 +443,14 @@ void __ubsan_handle_shift_out_of_bounds(
 }
 EXPORT_SYMBOL(__ubsan_handle_shift_out_of_bounds);
 
+__attribute__((noreturn))
 void __ubsan_handle_builtin_unreachable(struct unreachable_data *data)
 {
-
-	if (suppress_report(UNREACHABLE, &data->location))
-		return;
 
 	ubsan_prologue(&data->location);
 	pr_err("calling __builtin_unreachable()\n");
 	ubsan_epilogue();
-
+	BUG();
 }
 EXPORT_SYMBOL(__ubsan_handle_builtin_unreachable);
 
