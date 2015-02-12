@@ -8,13 +8,16 @@
 #include <asm/tlbflush.h>
 
 static char kasan_zero_page[PAGE_SIZE] __aligned(PAGE_SIZE);
+#define PGD_SIZE	(PTRS_PER_PGD * sizeof(pgd_t))
+static char tmp_page_table[PGD_SIZE] __aligned(PAGE_SIZE);
 
-static char tmp_page_table[PAGE_SIZE] __aligned(PAGE_SIZE);
-
-
-static pud_t kasan_zero_pud[PTRS_PER_PUD] __aligned(PAGE_SIZE);
-static pmd_t kasan_zero_pmd[PTRS_PER_PMD] __aligned(PAGE_SIZE);
-static pte_t kasan_zero_pte[PTRS_PER_PTE] __aligned(PAGE_SIZE);
+#if CONFIG_ARM64_PGTABLE_LEVELS > 3
+static pud_t kasan_zero_pud[PTRS_PER_PUD] __page_aligned_bss;
+#endif
+#if CONFIG_ARM64_PGTABLE_LEVELS > 2
+static pmd_t kasan_zero_pmd[PTRS_PER_PMD] __page_aligned_bss;
+#endif
+static pte_t kasan_zero_pte[PTRS_PER_PTE] __page_aligned_bss;
 
 static void __init create_pte(void)
 {
@@ -29,10 +32,11 @@ static void __init create_pmd(void)
 {
 	int i;
 
+#if CONFIG_ARM64_PGTABLE_LEVELS > 2
 	for (i = 0; i < PTRS_PER_PMD; i++)
 		set_pmd(&kasan_zero_pmd[i], __pmd(__pa(kasan_zero_pte)
 							| PAGE_KERNEL));
-
+#endif
 	create_pte();
 }
 
@@ -40,13 +44,15 @@ static void __init create_pud(void)
 {
 	int i;
 
+#if CONFIG_ARM64_PGTABLE_LEVELS > 3
 	for (i = 0; i < PTRS_PER_PUD; i++)
 		set_pud(&kasan_zero_pud[i], __pud(__pa(kasan_zero_pmd)
 							| PAGE_KERNEL));
-
+#endif
 	create_pmd();
 }
 
+#if CONFIG_ARM64_PGTABLE_LEVELS > 3
 void __init kasan_map_early_shadow(pgd_t *pgd)
 {
 	int i;
@@ -59,7 +65,34 @@ void __init kasan_map_early_shadow(pgd_t *pgd)
 		start += PGDIR_SIZE;
 	}
 }
+#elif CONFIG_ARM64_PGTABLE_LEVELS > 2
+void __init kasan_map_early_shadow(pgd_t *pgd)
+{
+	int i;
+	unsigned long start = KASAN_SHADOW_START;
+	unsigned long end = KASAN_SHADOW_END;
 
+	for (i = pgd_index(start); start < end; i++) {
+		set_pgd(&pgd[i], __pgd(__pa(kasan_zero_pmd)
+					| PAGE_KERNEL));
+		start += PGDIR_SIZE;
+	}
+}
+#else
+void __init kasan_map_early_shadow(pgd_t *pgd)
+{
+	int i;
+	unsigned long start = KASAN_SHADOW_START;
+	unsigned long end = KASAN_SHADOW_END;
+
+	for (i = pgd_index(start); start < end; i++) {
+		set_pgd(&pgd[i], __pgd(__pa(kasan_zero_pte)
+					| PAGE_KERNEL));
+		start += PGDIR_SIZE;
+	}
+}
+
+#endif
 
 void __init kasan_init(void)
 {
@@ -70,20 +103,35 @@ void __init kasan_init(void)
 	start_kernel();
 }
 
+#if CONFIG_ARM64_PGTABLE_LEVELS == 4
 static void __init clear_pgds(unsigned long start,
 			unsigned long end)
 {
 	for (; start && start < end; start += PGDIR_SIZE)
 		pgd_clear(pgd_offset_k(start));
 }
+#elif CONFIG_ARM64_PGTABLE_LEVELS == 3
+static void __init clear_pgds(unsigned long start,
+			unsigned long end)
+{
+	for (; start && start < end; start += PGDIR_SIZE)
+		pud_clear(pud_offset(pgd_offset_k(start), start));
+}
+#elif CONFIG_ARM64_PGTABLE_LEVELS == 2
+static void __init clear_pgds(unsigned long start,
+			unsigned long end)
+{
+	for (; start && start < end; start += PGDIR_SIZE)
+		pmd_clear(pmd_offset(pud_offset(pgd_offset_k(start), start), start));
+}
+#endif
 static int __init zero_pte_populate(pmd_t *pmd, unsigned long addr,
 				unsigned long end)
 {
 	pte_t *pte = pte_offset_kernel(pmd, addr);
 
 	while (addr + PAGE_SIZE <= end) {
-		WARN_ON(!pte_none(*pte));
-		set_pte(pte, __pte(__pa(empty_zero_page)
+		set_pte(pte, __pte(__pa(kasan_zero_page)
 					| PAGE_KERNEL_RO));
 		addr += PAGE_SIZE;
 		pte = pte_offset_kernel(pmd, addr);
@@ -98,12 +146,13 @@ static int __init zero_pmd_populate(pud_t *pud, unsigned long addr,
 	pmd_t *pmd = pmd_offset(pud, addr);
 
 	while (IS_ALIGNED(addr, PMD_SIZE) && addr + PMD_SIZE <= end) {
-		WARN_ON(!pmd_none(*pmd));
 		set_pmd(pmd, __pmd(__pa(kasan_zero_pte)
 					| PAGE_KERNEL_RO));
 		addr += PMD_SIZE;
+		pud = pud_offset(pgd_offset_k(addr), addr);
 		pmd = pmd_offset(pud, addr);
 	}
+
 	if (addr < end) {
 		if (pmd_none(*pmd)) {
 			void *p = vmemmap_alloc_block(PAGE_SIZE, NUMA_NO_NODE);
@@ -116,7 +165,7 @@ static int __init zero_pmd_populate(pud_t *pud, unsigned long addr,
 	return ret;
 }
 
-
+#if CONFIG_ARM64_PGTABLE_LEVELS > 2
 static int __init zero_pud_populate(pgd_t *pgd, unsigned long addr,
 				unsigned long end)
 {
@@ -124,10 +173,10 @@ static int __init zero_pud_populate(pgd_t *pgd, unsigned long addr,
 	pud_t *pud = pud_offset(pgd, addr);
 
 	while (IS_ALIGNED(addr, PUD_SIZE) && addr + PUD_SIZE <= end) {
-		WARN_ON(!pud_none(*pud));
 		set_pud(pud, __pud(__pa(kasan_zero_pmd)
 					| PAGE_KERNEL_RO));
 		addr += PUD_SIZE;
+		pgd = pgd_offset_k(addr);
 		pud = pud_offset(pgd, addr);
 	}
 
@@ -142,14 +191,24 @@ static int __init zero_pud_populate(pgd_t *pgd, unsigned long addr,
 	}
 	return ret;
 }
+#else
 
+static int __init zero_pud_populate(pgd_t *pgd, unsigned long addr,
+				unsigned long end)
+{
+	pud_t *pud = pud_offset(pgd, addr);
+
+	return zero_pmd_populate(pud, addr, end);
+}
+#endif
+
+#if CONFIG_ARM64_PGTABLE_LEVELS > 3
 static int __init zero_pgd_populate(unsigned long addr, unsigned long end)
 {
 	int ret = 0;
 	pgd_t *pgd = pgd_offset_k(addr);
 
 	while (IS_ALIGNED(addr, PGDIR_SIZE) && addr + PGDIR_SIZE <= end) {
-		WARN_ON(!pgd_none(*pgd));
 		set_pgd(pgd, __pgd(__pa(kasan_zero_pud)
 					| PAGE_KERNEL_RO));
 		addr += PGDIR_SIZE;
@@ -167,7 +226,14 @@ static int __init zero_pgd_populate(unsigned long addr, unsigned long end)
 	}
 	return ret;
 }
+#else
+static int __init zero_pgd_populate(unsigned long addr, unsigned long end)
+{
+	pgd_t *pgd = pgd_offset_k(addr);
 
+	return zero_pud_populate(pgd, addr, end);
+}
+#endif
 
 static void __init populate_zero_shadow(unsigned long start, unsigned long end)
 {
@@ -189,13 +255,12 @@ void __init kasan_mem_init(void)
 	struct memblock_region *reg;
 	phys_addr_t limit;
 
-	memcpy(tmp_page_table, swapper_pg_dir, PAGE_SIZE);
+	memcpy(tmp_page_table, swapper_pg_dir, sizeof(tmp_page_table));
 	cpu_set_reserved_ttbr1(__pa(tmp_page_table));
 
-	clear_pgds(kasan_mem_to_shadow(VMALLOC_START), kasan_mem_to_shadow(PAGE_OFFSET));
-	clear_pgds(kasan_mem_to_shadow(PAGE_OFFSET), kasan_mem_to_shadow(-1ULL) + 1);
+	clear_pgds(KASAN_SHADOW_START, KASAN_SHADOW_END);
 
-	populate_zero_shadow(kasan_mem_to_shadow(VMALLOC_START),
+	populate_zero_shadow(KASAN_SHADOW_START,
 			kasan_mem_to_shadow(MODULES_VADDR));
 
 	if (IS_ENABLED(CONFIG_ARM64_64K_PAGES))

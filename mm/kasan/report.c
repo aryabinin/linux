@@ -223,11 +223,13 @@ void kasan_report(unsigned long addr, size_t size,
 	if (likely(!kasan_enabled()))
 		return;
 
+	kasan_disable_current();
 	info.access_addr = (void *)addr;
 	info.access_size = size;
 	info.is_write = is_write;
 	info.ip = ip;
 	kasan_report_error(&info);
+	kasan_enable_current();
 }
 
 
