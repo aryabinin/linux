@@ -29,7 +29,7 @@ static noinline void __init kmalloc_oob_right(void)
 		return;
 	}
 
-	ptr[size] = 'x';
+	*(volatile char *)&ptr[size];
 	kfree(ptr);
 }
 
@@ -61,7 +61,7 @@ static noinline void __init kmalloc_node_oob_right(void)
 		return;
 	}
 
-	ptr[size] = 0;
+	*(volatile char*)&ptr[size];
 	kfree(ptr);
 }
 
@@ -77,7 +77,7 @@ static noinline void __init kmalloc_large_oob_rigth(void)
 		return;
 	}
 
-	ptr[size] = 0;
+	*(volatile char*)&ptr[size];
 	kfree(ptr);
 }
 
@@ -96,7 +96,7 @@ static noinline void __init kmalloc_oob_krealloc_more(void)
 		return;
 	}
 
-	ptr2[size2] = 'x';
+	*(volatile char*)&ptr2[size2];
 	kfree(ptr2);
 }
 
@@ -114,13 +114,13 @@ static noinline void __init kmalloc_oob_krealloc_less(void)
 		kfree(ptr1);
 		return;
 	}
-	ptr2[size1] = 'x';
+	*(volatile char*)&ptr2[size1];
 	kfree(ptr2);
 }
 
 static noinline void __init kmalloc_oob_16(void)
 {
-	struct {
+	volatile struct {
 		u64 words[2];
 	} *ptr1, *ptr2;
 
@@ -133,7 +133,8 @@ static noinline void __init kmalloc_oob_16(void)
 		kfree(ptr2);
 		return;
 	}
-	*ptr1 = *ptr2;
+	*ptr1;
+	*ptr2;
 	kfree(ptr1);
 	kfree(ptr2);
 }
@@ -150,7 +151,7 @@ static noinline void __init kmalloc_oob_in_memset(void)
 		return;
 	}
 
-	memset(ptr, 0, size+5);
+//	memset(ptr, 0, size+5);
 	kfree(ptr);
 }
 
@@ -167,7 +168,7 @@ static noinline void __init kmalloc_uaf(void)
 	}
 
 	kfree(ptr);
-	*(ptr + 8) = 'x';
+	*(volatile char*)(ptr + 8);
 }
 
 static noinline void __init kmalloc_uaf_memset(void)
@@ -183,7 +184,7 @@ static noinline void __init kmalloc_uaf_memset(void)
 	}
 
 	kfree(ptr);
-	memset(ptr, 0, size);
+//	memset(ptr, 0, size);
 }
 
 static noinline void __init kmalloc_uaf2(void)
@@ -205,7 +206,7 @@ static noinline void __init kmalloc_uaf2(void)
 		return;
 	}
 
-	ptr1[40] = 'x';
+	*(volatile char*)&ptr1[40];
 	kfree(ptr2);
 }
 
