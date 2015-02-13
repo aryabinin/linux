@@ -2,6 +2,7 @@
 #define _ASM_X86_ATOMIC_H
 
 #include <linux/compiler.h>
+#include <linux/kasan-checks.h>
 #include <linux/types.h>
 #include <asm/processor.h>
 #include <asm/alternative.h>
@@ -48,6 +49,7 @@ static inline void atomic_set(atomic_t *v, int i)
  */
 static inline void atomic_add(int i, atomic_t *v)
 {
+	kasan_check_write(&v->counter, sizeof(v->counter));
 	asm volatile(LOCK_PREFIX "addl %1,%0"
 		     : "+m" (v->counter)
 		     : "ir" (i));
@@ -62,6 +64,7 @@ static inline void atomic_add(int i, atomic_t *v)
  */
 static inline void atomic_sub(int i, atomic_t *v)
 {
+	kasan_check_write(&v->counter, sizeof(v->counter));
 	asm volatile(LOCK_PREFIX "subl %1,%0"
 		     : "+m" (v->counter)
 		     : "ir" (i));
@@ -78,6 +81,7 @@ static inline void atomic_sub(int i, atomic_t *v)
  */
 static inline int atomic_sub_and_test(int i, atomic_t *v)
 {
+	kasan_check_write(&v->counter, sizeof(v->counter));
 	GEN_BINARY_RMWcc(LOCK_PREFIX "subl", v->counter, "er", i, "%0", "e");
 }
 
@@ -89,6 +93,7 @@ static inline int atomic_sub_and_test(int i, atomic_t *v)
  */
 static inline void atomic_inc(atomic_t *v)
 {
+	kasan_check_write(&v->counter, sizeof(v->counter));
 	asm volatile(LOCK_PREFIX "incl %0"
 		     : "+m" (v->counter));
 }
@@ -101,6 +106,7 @@ static inline void atomic_inc(atomic_t *v)
  */
 static inline void atomic_dec(atomic_t *v)
 {
+	kasan_check_write(&v->counter, sizeof(v->counter));
 	asm volatile(LOCK_PREFIX "decl %0"
 		     : "+m" (v->counter));
 }
@@ -115,6 +121,7 @@ static inline void atomic_dec(atomic_t *v)
  */
 static inline int atomic_dec_and_test(atomic_t *v)
 {
+	kasan_check_write(&v->counter, sizeof(v->counter));
 	GEN_UNARY_RMWcc(LOCK_PREFIX "decl", v->counter, "%0", "e");
 }
 
@@ -128,6 +135,7 @@ static inline int atomic_dec_and_test(atomic_t *v)
  */
 static inline int atomic_inc_and_test(atomic_t *v)
 {
+	kasan_check_write(&v->counter, sizeof(v->counter));
 	GEN_UNARY_RMWcc(LOCK_PREFIX "incl", v->counter, "%0", "e");
 }
 
@@ -142,6 +150,7 @@ static inline int atomic_inc_and_test(atomic_t *v)
  */
 static inline int atomic_add_negative(int i, atomic_t *v)
 {
+	kasan_check_write(&v->counter, sizeof(v->counter));
 	GEN_BINARY_RMWcc(LOCK_PREFIX "addl", v->counter, "er", i, "%0", "s");
 }
 
@@ -166,6 +175,7 @@ static inline int atomic_add_return(int i, atomic_t *v)
  */
 static inline int atomic_sub_return(int i, atomic_t *v)
 {
+	kasan_check_write(&v->counter, sizeof(v->counter));
 	return atomic_add_return(-i, v);
 }
 
@@ -215,16 +225,19 @@ static inline int __atomic_add_unless(atomic_t *v, int a, int u)
  */
 static inline short int atomic_inc_short(short int *v)
 {
+	kasan_check_write(v, sizeof(*v));
 	asm(LOCK_PREFIX "addw $1, %0" : "+m" (*v));
 	return *v;
 }
 
 /* These are x86-specific, used by some header files */
 #define atomic_clear_mask(mask, addr)				\
+	kasan_check_write(addr, sizeof(*addr));			\
 	asm volatile(LOCK_PREFIX "andl %0,%1"			\
 		     : : "r" (~(mask)), "m" (*(addr)) : "memory")
 
 #define atomic_set_mask(mask, addr)				\
+	kasan_check_write(addr, sizeof(*addr));			\
 	asm volatile(LOCK_PREFIX "orl %0,%1"			\
 		     : : "r" ((unsigned)(mask)), "m" (*(addr))	\
 		     : "memory")

@@ -259,6 +259,20 @@ static __always_inline void check_memory_region(unsigned long addr,
 void __asan_loadN(unsigned long addr, size_t size);
 void __asan_storeN(unsigned long addr, size_t size);
 
+#undef kasan_check_read
+void kasan_check_read(const void *p, size_t size)
+{
+	__asan_loadN((unsigned long)p, size);
+}
+EXPORT_SYMBOL(kasan_check_read);
+
+#undef kasan_check_write
+void kasan_check_write(const void *p, size_t size)
+{
+	__asan_storeN((unsigned long)p, size);
+}
+EXPORT_SYMBOL(kasan_check_write);
+
 #undef memset
 void *memset(void *addr, int c, size_t len)
 {

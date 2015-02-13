@@ -13,6 +13,7 @@
 #endif
 
 #include <linux/compiler.h>
+#include <linux/kasan-checks.h>
 #include <asm/alternative.h>
 #include <asm/rmwcc.h>
 #include <asm/barrier.h>
@@ -71,6 +72,8 @@
 static __always_inline void
 set_bit(long nr, volatile unsigned long *addr)
 {
+	kasan_check_write((void *)(addr) + ((nr)>>3), sizeof(*addr));
+
 	if (IS_IMMEDIATE(nr)) {
 		asm volatile(LOCK_PREFIX "orb %1,%0"
 			: CONST_MASK_ADDR(nr, addr)
@@ -93,6 +96,8 @@ set_bit(long nr, volatile unsigned long *addr)
  */
 static inline void __set_bit(long nr, volatile unsigned long *addr)
 {
+	kasan_check_write((void *)(addr) + ((nr)>>3), sizeof(*addr));
+
 	asm volatile("bts %1,%0" : ADDR : "Ir" (nr) : "memory");
 }
 
@@ -109,6 +114,7 @@ static inline void __set_bit(long nr, volatile unsigned long *addr)
 static __always_inline void
 clear_bit(long nr, volatile unsigned long *addr)
 {
+	kasan_check_write((void *)(addr) + ((nr)>>3), sizeof(*addr));
 	if (IS_IMMEDIATE(nr)) {
 		asm volatile(LOCK_PREFIX "andb %1,%0"
 			: CONST_MASK_ADDR(nr, addr)
@@ -136,6 +142,7 @@ static inline void clear_bit_unlock(long nr, volatile unsigned long *addr)
 
 static inline void __clear_bit(long nr, volatile unsigned long *addr)
 {
+	kasan_check_write((void *)(addr) + ((nr)>>3), sizeof(*addr));
 	asm volatile("btr %1,%0" : ADDR : "Ir" (nr));
 }
 
@@ -168,6 +175,7 @@ static inline void __clear_bit_unlock(long nr, volatile unsigned long *addr)
  */
 static inline void __change_bit(long nr, volatile unsigned long *addr)
 {
+	kasan_check_write((void *)(addr) + ((nr)>>3), sizeof(*addr));
 	asm volatile("btc %1,%0" : ADDR : "Ir" (nr));
 }
 
@@ -182,6 +190,7 @@ static inline void __change_bit(long nr, volatile unsigned long *addr)
  */
 static inline void change_bit(long nr, volatile unsigned long *addr)
 {
+	kasan_check_write((void *)(addr) + ((nr)>>3), sizeof(*addr));
 	if (IS_IMMEDIATE(nr)) {
 		asm volatile(LOCK_PREFIX "xorb %1,%0"
 			: CONST_MASK_ADDR(nr, addr)
@@ -203,6 +212,7 @@ static inline void change_bit(long nr, volatile unsigned long *addr)
  */
 static inline int test_and_set_bit(long nr, volatile unsigned long *addr)
 {
+	kasan_check_write((void *)(addr) + ((nr)>>3), sizeof(*addr));
 	GEN_BINARY_RMWcc(LOCK_PREFIX "bts", *addr, "Ir", nr, "%0", "c");
 }
 
@@ -231,7 +241,7 @@ test_and_set_bit_lock(long nr, volatile unsigned long *addr)
 static inline int __test_and_set_bit(long nr, volatile unsigned long *addr)
 {
 	int oldbit;
-
+	kasan_check_write((void *)(addr) + ((nr)>>3), sizeof(*addr));
 	asm("bts %2,%1\n\t"
 	    "sbb %0,%0"
 	    : "=r" (oldbit), ADDR
@@ -249,6 +259,7 @@ static inline int __test_and_set_bit(long nr, volatile unsigned long *addr)
  */
 static inline int test_and_clear_bit(long nr, volatile unsigned long *addr)
 {
+	kasan_check_write((void *)(addr) + ((nr)>>3), sizeof(*addr));
 	GEN_BINARY_RMWcc(LOCK_PREFIX "btr", *addr, "Ir", nr, "%0", "c");
 }
 
@@ -272,6 +283,7 @@ static inline int __test_and_clear_bit(long nr, volatile unsigned long *addr)
 {
 	int oldbit;
 
+	kasan_check_write((void *)(addr) + ((nr)>>3), sizeof(*addr));
 	asm volatile("btr %2,%1\n\t"
 		     "sbb %0,%0"
 		     : "=r" (oldbit), ADDR
@@ -284,6 +296,7 @@ static inline int __test_and_change_bit(long nr, volatile unsigned long *addr)
 {
 	int oldbit;
 
+	kasan_check_write((void *)(addr) + ((nr)>>3), sizeof(*addr));
 	asm volatile("btc %2,%1\n\t"
 		     "sbb %0,%0"
 		     : "=r" (oldbit), ADDR
@@ -302,6 +315,8 @@ static inline int __test_and_change_bit(long nr, volatile unsigned long *addr)
  */
 static inline int test_and_change_bit(long nr, volatile unsigned long *addr)
 {
+	kasan_check_write((void *)(addr) + ((nr)>>3), sizeof(*addr));
+
 	GEN_BINARY_RMWcc(LOCK_PREFIX "btc", *addr, "Ir", nr, "%0", "c");
 }
 
@@ -314,6 +329,8 @@ static __always_inline int constant_test_bit(long nr, const volatile unsigned lo
 static inline int variable_test_bit(long nr, volatile const unsigned long *addr)
 {
 	int oldbit;
+
+	kasan_check_read((void *)(addr) + ((nr)>>3), sizeof(*addr));
 
 	asm volatile("bt %2,%1\n\t"
 		     "sbb %0,%0"

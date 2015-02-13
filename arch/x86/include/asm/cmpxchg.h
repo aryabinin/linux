@@ -42,6 +42,7 @@ extern void __add_wrong_size(void)
 #define __xchg_op(ptr, arg, op, lock)					\
 	({								\
 	        __typeof__ (*(ptr)) __ret = (arg);			\
+		kasan_check_write((void *)ptr, sizeof(*ptr));			\
 		switch (sizeof(*(ptr))) {				\
 		case __X86_CASE_B:					\
 			asm volatile (lock #op "b %b0, %1\n"		\
@@ -87,6 +88,7 @@ extern void __add_wrong_size(void)
 	__typeof__(*(ptr)) __ret;					\
 	__typeof__(*(ptr)) __old = (old);				\
 	__typeof__(*(ptr)) __new = (new);				\
+	kasan_check_write((void *)ptr, sizeof(*ptr));				\
 	switch (size) {							\
 	case __X86_CASE_B:						\
 	{								\
@@ -170,6 +172,7 @@ extern void __add_wrong_size(void)
 #define __add(ptr, inc, lock)						\
 	({								\
 	        __typeof__ (*(ptr)) __ret = (inc);			\
+		kasan_check_write((void *)ptr, sizeof(*ptr));			\
 		switch (sizeof(*(ptr))) {				\
 		case __X86_CASE_B:					\
 			asm volatile (lock "addb %b1, %0\n"		\
@@ -212,6 +215,8 @@ extern void __add_wrong_size(void)
 	bool __ret;							\
 	__typeof__(*(p1)) __old1 = (o1), __new1 = (n1);			\
 	__typeof__(*(p2)) __old2 = (o2), __new2 = (n2);			\
+	kasan_check_write((void *)p1, sizeof(*p1));			\
+	kasan_check_write((void *)p2, sizeof(*p2));			\
 	BUILD_BUG_ON(sizeof(*(p1)) != sizeof(long));			\
 	BUILD_BUG_ON(sizeof(*(p2)) != sizeof(long));			\
 	VM_BUG_ON((unsigned long)(p1) % (2 * sizeof(long)));		\

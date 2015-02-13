@@ -2,6 +2,7 @@
 #define _ASM_X86_ATOMIC64_64_H
 
 #include <linux/types.h>
+#include <linux/kasan-checks.h>
 #include <asm/alternative.h>
 #include <asm/cmpxchg.h>
 
@@ -42,6 +43,7 @@ static inline void atomic64_set(atomic64_t *v, long i)
  */
 static inline void atomic64_add(long i, atomic64_t *v)
 {
+	kasan_check_write(&v->counter, sizeof(v->counter));
 	asm volatile(LOCK_PREFIX "addq %1,%0"
 		     : "=m" (v->counter)
 		     : "er" (i), "m" (v->counter));
@@ -56,6 +58,7 @@ static inline void atomic64_add(long i, atomic64_t *v)
  */
 static inline void atomic64_sub(long i, atomic64_t *v)
 {
+	kasan_check_write(&v->counter, sizeof(v->counter));
 	asm volatile(LOCK_PREFIX "subq %1,%0"
 		     : "=m" (v->counter)
 		     : "er" (i), "m" (v->counter));
@@ -72,6 +75,7 @@ static inline void atomic64_sub(long i, atomic64_t *v)
  */
 static inline int atomic64_sub_and_test(long i, atomic64_t *v)
 {
+	kasan_check_write(&v->counter, sizeof(v->counter));
 	GEN_BINARY_RMWcc(LOCK_PREFIX "subq", v->counter, "er", i, "%0", "e");
 }
 
@@ -83,6 +87,7 @@ static inline int atomic64_sub_and_test(long i, atomic64_t *v)
  */
 static inline void atomic64_inc(atomic64_t *v)
 {
+	kasan_check_write(&v->counter, sizeof(v->counter));
 	asm volatile(LOCK_PREFIX "incq %0"
 		     : "=m" (v->counter)
 		     : "m" (v->counter));
@@ -96,6 +101,7 @@ static inline void atomic64_inc(atomic64_t *v)
  */
 static inline void atomic64_dec(atomic64_t *v)
 {
+	kasan_check_write(&v->counter, sizeof(v->counter));
 	asm volatile(LOCK_PREFIX "decq %0"
 		     : "=m" (v->counter)
 		     : "m" (v->counter));
@@ -111,6 +117,7 @@ static inline void atomic64_dec(atomic64_t *v)
  */
 static inline int atomic64_dec_and_test(atomic64_t *v)
 {
+	kasan_check_write(&v->counter, sizeof(v->counter));
 	GEN_UNARY_RMWcc(LOCK_PREFIX "decq", v->counter, "%0", "e");
 }
 
@@ -124,6 +131,7 @@ static inline int atomic64_dec_and_test(atomic64_t *v)
  */
 static inline int atomic64_inc_and_test(atomic64_t *v)
 {
+	kasan_check_write(&v->counter, sizeof(v->counter));
 	GEN_UNARY_RMWcc(LOCK_PREFIX "incq", v->counter, "%0", "e");
 }
 
@@ -138,6 +146,7 @@ static inline int atomic64_inc_and_test(atomic64_t *v)
  */
 static inline int atomic64_add_negative(long i, atomic64_t *v)
 {
+	kasan_check_write(&v->counter, sizeof(v->counter));
 	GEN_BINARY_RMWcc(LOCK_PREFIX "addq", v->counter, "er", i, "%0", "s");
 }
 
