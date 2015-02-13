@@ -7,9 +7,8 @@
 #include <asm/pgtable.h>
 #include <asm/tlbflush.h>
 
-static char kasan_zero_page[PAGE_SIZE] __aligned(PAGE_SIZE);
-#define PGD_SIZE	(PTRS_PER_PGD * sizeof(pgd_t))
-static char tmp_page_table[PGD_SIZE] __aligned(PAGE_SIZE);
+static char kasan_zero_page[PAGE_SIZE] __page_aligned_bss;
+static pgd_t tmp_page_table[PTRS_PER_PGD] __initdata __aligned(PAGE_SIZE);
 
 #if CONFIG_ARM64_PGTABLE_LEVELS > 3
 static pud_t kasan_zero_pud[PTRS_PER_PUD] __page_aligned_bss;
@@ -291,7 +290,7 @@ void __init kasan_mem_init(void)
 
 		vmemmap_populate(kasan_mem_to_shadow(__phys_to_virt(start)),
 				kasan_mem_to_shadow(__phys_to_virt(end)),
-				NUMA_NO_NODE);
+				pfn_to_nid(__phys_to_pfn(start)));
 
 	}
 	memset(kasan_zero_page, 0, PAGE_SIZE);
