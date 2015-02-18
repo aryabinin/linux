@@ -5,6 +5,7 @@
 
 struct kmem_cache;
 struct page;
+struct vm_struct;
 
 #ifdef CONFIG_KASAN
 
@@ -12,6 +13,7 @@ struct page;
 #define KASAN_SHADOW_OFFSET _AC(CONFIG_KASAN_SHADOW_OFFSET, UL)
 
 #include <asm/kasan.h>
+#include <linux/kernel.h>
 #include <linux/sched.h>
 
 static inline void *kasan_mem_to_shadow(const void *addr)
@@ -49,14 +51,18 @@ void kasan_krealloc(const void *object, size_t new_size);
 void kasan_slab_alloc(struct kmem_cache *s, void *object);
 void kasan_slab_free(struct kmem_cache *s, void *object);
 
-#define MODULE_ALIGN (PAGE_SIZE << KASAN_SHADOW_SCALE_SHIFT)
+int kasan_vmalloc(const void *addr, size_t size);
+void kasan_vfree(const void *addr, const struct vm_struct *vm);
 
-int kasan_module_alloc(void *addr, size_t size);
-void kasan_module_free(void *addr);
+static inline unsigned long kasan_vmalloc_align(unsigned long addr,
+						unsigned long align)
+{
+	if (addr >= MODULES_VADDR && addr < MODULES_END)
+		return ALIGN(align, PAGE_SIZE << KASAN_SHADOW_SCALE_SHIFT);
+	return align;
+}
 
 #else /* CONFIG_KASAN */
-
-#define MODULE_ALIGN 1
 
 static inline void kasan_unpoison_shadow(const void *address, size_t size) {}
 
@@ -81,8 +87,14 @@ static inline void kasan_krealloc(const void *object, size_t new_size) {}
 static inline void kasan_slab_alloc(struct kmem_cache *s, void *object) {}
 static inline void kasan_slab_free(struct kmem_cache *s, void *object) {}
 
-static inline int kasan_module_alloc(void *addr, size_t size) { return 0; }
-static inline void kasan_module_free(void *addr) {}
+static inline int kasan_vmalloc(const void *addr, size_t size) { return 0; }
+static inline void kasan_vfree(const void *addr, struct vm_struct *vm) {}
+
+static inline unsigned long kasan_vmalloc_align(unsigned long addr,
+						unsigned long align)
+{
+	return align;
+}
 
 #endif /* CONFIG_KASAN */
 

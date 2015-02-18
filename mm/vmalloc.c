@@ -20,6 +20,7 @@
 #include <linux/seq_file.h>
 #include <linux/debugobjects.h>
 #include <linux/kallsyms.h>
+#include <linux/kasan.h>
 #include <linux/list.h>
 #include <linux/rbtree.h>
 #include <linux/radix-tree.h>
@@ -1412,6 +1413,8 @@ struct vm_struct *remove_vm_area(const void *addr)
 	if (va && va->flags & VM_VM_AREA) {
 		struct vm_struct *vm = va->vm;
 
+		kasan_vfree(addr, vm);
+
 		spin_lock(&vmap_area_lock);
 		va->vm = NULL;
 		va->flags &= ~VM_VM_AREA;
@@ -1640,6 +1643,8 @@ void *__vmalloc_node_range(unsigned long size, unsigned long align,
 	if (!size || (size >> PAGE_SHIFT) > totalram_pages)
 		goto fail;
 
+	align = kasan_vmalloc_align(start, align);
+
 	area = __get_vm_area_node(size, align, VM_ALLOC | VM_UNINITIALIZED |
 				vm_flags, start, end, node, gfp_mask, caller);
 	if (!area)
@@ -1648,6 +1653,11 @@ void *__vmalloc_node_range(unsigned long size, unsigned long align,
 	addr = __vmalloc_area_node(area, gfp_mask, prot, node);
 	if (!addr)
 		return NULL;
+
+	if (kasan_vmalloc(addr, size) < 0) {
+		vfree(addr);
+		return NULL;
+	}
 
 	/*
 	 * In this function, newly allocated vm_struct has VM_UNINITIALIZED

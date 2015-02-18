@@ -29,6 +29,7 @@
 #include <linux/stacktrace.h>
 #include <linux/string.h>
 #include <linux/types.h>
+#include <linux/vmalloc.h>
 #include <linux/kasan.h>
 
 #include "kasan.h"
@@ -410,7 +411,7 @@ void kasan_kfree_large(const void *ptr)
 			KASAN_FREE_PAGE);
 }
 
-int kasan_module_alloc(void *addr, size_t size)
+int kasan_vmalloc(const void *addr, size_t size)
 {
 	void *ret;
 	size_t shadow_size;
@@ -419,6 +420,9 @@ int kasan_module_alloc(void *addr, size_t size)
 	shadow_start = (unsigned long)kasan_mem_to_shadow(addr);
 	shadow_size = round_up(size >> KASAN_SHADOW_SCALE_SHIFT,
 			PAGE_SIZE);
+
+	if (!(addr >= (void *)MODULES_VADDR && addr < (void *)MODULES_END))
+		return 0;
 
 	if (WARN_ON(!PAGE_ALIGNED(shadow_start)))
 		return -EINVAL;
@@ -431,9 +435,11 @@ int kasan_module_alloc(void *addr, size_t size)
 	return ret ? 0 : -ENOMEM;
 }
 
-void kasan_module_free(void *addr)
+void kasan_vfree(const void *addr, const struct vm_struct *vm)
 {
-	vfree(kasan_mem_to_shadow(addr));
+	if (addr >= (void *)MODULES_VADDR && addr < (void *)MODULES_END
+		&& !(vm->flags & VM_UNINITIALIZED))
+			vfree(kasan_mem_to_shadow(addr));
 }
 
 static void register_global(struct kasan_global *global)
