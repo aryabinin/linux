@@ -123,6 +123,7 @@ static void __init clear_pgds(unsigned long start,
 		pmd_clear(pmd_offset(pud_offset(pgd_offset_k(start), start), start));
 }
 #endif
+
 static int __init zero_pte_populate(pmd_t *pmd, unsigned long addr,
 				unsigned long end)
 {
@@ -147,8 +148,7 @@ static int __init zero_pmd_populate(pud_t *pud, unsigned long addr,
 		set_pmd(pmd, __pmd(__pa(kasan_zero_pte)
 					| PAGE_KERNEL_RO));
 		addr += PMD_SIZE;
-		pud = pud_offset(pgd_offset_k(addr), addr);
-		pmd = pmd_offset(pud, addr);
+		pmd++;
 	}
 
 	if (addr < end) {
@@ -163,21 +163,20 @@ static int __init zero_pmd_populate(pud_t *pud, unsigned long addr,
 	return ret;
 }
 
-#if CONFIG_PGTABLE_LEVELS > 2
 static int __init zero_pud_populate(pgd_t *pgd, unsigned long addr,
 				unsigned long end)
 {
 	int ret = 0;
 	pud_t *pud = pud_offset(pgd, addr);
 
+#if CONFIG_PGTABLE_LEVELS > 2
 	while (IS_ALIGNED(addr, PUD_SIZE) && addr + PUD_SIZE <= end) {
 		set_pud(pud, __pud(__pa(kasan_zero_pmd)
 					| PAGE_KERNEL_RO));
 		addr += PUD_SIZE;
-		pgd = pgd_offset_k(addr);
-		pud = pud_offset(pgd, addr);
+		pud++;
 	}
-
+#endif
 	if (addr < end) {
 		if (pud_none(*pud)) {
 			void *p = vmemmap_alloc_block(PAGE_SIZE, NUMA_NO_NODE);
@@ -189,30 +188,20 @@ static int __init zero_pud_populate(pgd_t *pgd, unsigned long addr,
 	}
 	return ret;
 }
-#else
 
-static int __init zero_pud_populate(pgd_t *pgd, unsigned long addr,
-				unsigned long end)
-{
-	pud_t *pud = pud_offset(pgd, addr);
-
-	return zero_pmd_populate(pud, addr, end);
-}
-#endif
-
-#if CONFIG_PGTABLE_LEVELS > 3
 static int __init zero_pgd_populate(unsigned long addr, unsigned long end)
 {
 	int ret = 0;
 	pgd_t *pgd = pgd_offset_k(addr);
 
+#if CONFIG_PGTABLE_LEVELS > 3
 	while (IS_ALIGNED(addr, PGDIR_SIZE) && addr + PGDIR_SIZE <= end) {
 		set_pgd(pgd, __pgd(__pa(kasan_zero_pud)
 					| PAGE_KERNEL_RO));
 		addr += PGDIR_SIZE;
-		pgd = pgd_offset_k(addr);
+		pgd++;
 	}
-
+#endif
 	if (addr < end) {
 		if (pgd_none(*pgd)) {
 			void *p = vmemmap_alloc_block(PAGE_SIZE, NUMA_NO_NODE);
@@ -224,14 +213,6 @@ static int __init zero_pgd_populate(unsigned long addr, unsigned long end)
 	}
 	return ret;
 }
-#else
-static int __init zero_pgd_populate(unsigned long addr, unsigned long end)
-{
-	pgd_t *pgd = pgd_offset_k(addr);
-
-	return zero_pud_populate(pgd, addr, end);
-}
-#endif
 
 static void __init populate_zero_shadow(unsigned long start, unsigned long end)
 {
