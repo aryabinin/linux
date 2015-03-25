@@ -62,7 +62,6 @@ void __init kasan_early_init(void)
 {
 	init_kasan_page_tables();
 	kasan_map_early_shadow(swapper_pg_dir);
-	kasan_map_early_shadow(idmap_pg_dir);
 	flush_tlb_all();
 	start_kernel();
 }
