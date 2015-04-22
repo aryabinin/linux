@@ -15,8 +15,8 @@
 #ifndef __ASSEMBLY__
 
 extern pte_t kasan_zero_pte[];
-extern pte_t kasan_zero_pmd[];
-extern pte_t kasan_zero_pud[];
+extern pmd_t kasan_zero_pmd[];
+extern pud_t kasan_zero_pud[];
 
 #ifdef CONFIG_KASAN
 void __init kasan_map_early_shadow(pgd_t *pgd);
