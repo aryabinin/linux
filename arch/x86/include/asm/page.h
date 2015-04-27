@@ -64,6 +64,7 @@ static inline void copy_user_page(void *to, void *from, unsigned long vaddr,
 #define pfn_to_kaddr(pfn)      __va((pfn) << PAGE_SHIFT)
 extern bool __virt_addr_valid(unsigned long kaddr);
 #define virt_addr_valid(kaddr)	__virt_addr_valid((unsigned long) (kaddr))
+#define virt_to_pfn(kaddr)	(__pa(kaddr) >> PAGE_SHIFT)
 
 #endif	/* __ASSEMBLY__ */
 
