@@ -29,7 +29,7 @@ static int __init zero_pmd_populate(pud_t *pud, unsigned long addr,
 	int ret = 0;
 	pmd_t *pmd = pmd_offset(pud, addr);
 
-	while (IS_ALIGNED(addr, PMD_SIZE) && addr + PMD_SIZE <= end) {
+	while (IS_ALIGNED(addr, PMD_SIZE) && pmd_addr_end(addr, end) <= end) {
 		pmd_populate_kernel(&init_mm, pmd, kasan_zero_pte);
 		addr = pmd_addr_end(addr, end);
 		if (addr >= end)
@@ -55,7 +55,7 @@ static int __init zero_pud_populate(pgd_t *pgd, unsigned long addr,
 	int ret = 0;
 	pud_t *pud = pud_offset(pgd, addr);
 
-	while (IS_ALIGNED(addr, PUD_SIZE) && addr + PUD_SIZE <= end) {
+	while (IS_ALIGNED(addr, PUD_SIZE) && pud_addr_end(addr, end) <= end) {
 		pud_populate(&init_mm, pud, kasan_zero_pmd);
 		zero_pmd_populate(pud, addr, pud_addr_end(addr, end));
 		addr = pud_addr_end(addr, end);
@@ -81,7 +81,7 @@ static int __init zero_pgd_populate(unsigned long addr, unsigned long end)
 	int ret = 0;
 	pgd_t *pgd = pgd_offset_k(addr);
 
-	while (IS_ALIGNED(addr, PGDIR_SIZE) && (addr + PGDIR_SIZE) <= end) {
+	while (IS_ALIGNED(addr, PGDIR_SIZE) && pgd_addr_end(addr, end) <= end) {
 		pgd_populate(&init_mm, pgd, kasan_zero_pud);
 		zero_pud_populate(pgd, addr, pgd_addr_end(addr, end));
 		addr = pgd_addr_end(addr, end);
