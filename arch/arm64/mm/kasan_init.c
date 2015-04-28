@@ -76,7 +76,6 @@ void __init kasan_map_early_shadow(pgd_t *pgdp)
 void __init kasan_early_init(void)
 {
 	kasan_map_early_shadow(swapper_pg_dir);
-	flush_tlb_all();
 	start_kernel();
 }
 
