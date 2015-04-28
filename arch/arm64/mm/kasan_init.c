@@ -104,8 +104,8 @@ void __init kasan_init(void)
 
 	clear_pgds(KASAN_SHADOW_START, KASAN_SHADOW_END);
 
-	populate_zero_shadow(KASAN_SHADOW_START,
-			(unsigned long)kasan_mem_to_shadow((void *)MODULES_VADDR));
+	kasan_populate_zero_shadow((void *)KASAN_SHADOW_START,
+			kasan_mem_to_shadow((void *)MODULES_VADDR));
 
 	for_each_memblock(memory, reg) {
 		void *start = (void *)__phys_to_virt(reg->base);
