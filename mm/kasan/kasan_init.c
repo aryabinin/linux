@@ -1,6 +1,8 @@
+#include <linux/bootmem.h>
+#include <linux/init.h>
 #include <linux/kasan.h>
 #include <linux/kernel.h>
-#include <linux/init.h>
+#include <linux/memblock.h>
 
 #include <asm/page.h>
 #include <asm/pgalloc.h>
@@ -9,13 +11,19 @@
 #define PAGE_KERNEL_RO PAGE_KERNEL
 #endif
 
+static __init void *early_alloc(size_t size, int node)
+{
+	return memblock_virt_alloc_try_nid(size, size, __pa(MAX_DMA_ADDRESS),
+					BOOTMEM_ALLOC_ACCESSIBLE, node);
+}
+
 static int __init zero_pte_populate(pmd_t *pmd, unsigned long addr,
 				unsigned long end)
 {
 	pte_t *pte = pte_offset_kernel(pmd, addr);
 
 	while (addr + PAGE_SIZE <= end) {
-		set_pte(pte, pfn_pte(virt_to_pfn(kasan_zero_page),
+		set_pte_at(&init_mm, addr, pte, pfn_pte(virt_to_pfn(kasan_zero_page),
 					PAGE_KERNEL_RO));
 		addr += PAGE_SIZE;
 		pte = pte_offset_kernel(pmd, addr);
@@ -39,7 +47,7 @@ static int __init zero_pmd_populate(pud_t *pud, unsigned long addr,
 
 	if (addr < end) {
 		if (pmd_none(*pmd)) {
-			void *p = vmemmap_alloc_block(PAGE_SIZE, NUMA_NO_NODE);
+			void *p = early_alloc(PAGE_SIZE, NUMA_NO_NODE);
 			if (!p)
 				return -ENOMEM;
 			pmd_populate_kernel(&init_mm, pmd, p);
@@ -66,7 +74,7 @@ static int __init zero_pud_populate(pgd_t *pgd, unsigned long addr,
 
 	if (addr < end) {
 		if (pud_none(*pud)) {
-			void *p = vmemmap_alloc_block(PAGE_SIZE, NUMA_NO_NODE);
+			void *p = early_alloc(PAGE_SIZE, NUMA_NO_NODE);
 			if (!p)
 				return -ENOMEM;
 			pud_populate(&init_mm, pud, p);
@@ -92,7 +100,7 @@ static int __init zero_pgd_populate(unsigned long addr, unsigned long end)
 
 	if (addr < end) {
 		if (pgd_none(*pgd)) {
-			void *p = vmemmap_alloc_block(PAGE_SIZE, NUMA_NO_NODE);
+			void *p = early_alloc(PAGE_SIZE, NUMA_NO_NODE);
 			if (!p)
 				return -ENOMEM;
 			pgd_populate(&init_mm, pgd, p);

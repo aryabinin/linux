@@ -1157,8 +1157,8 @@ static inline void prepare_page_table(void)
 	/*
 	 * Clear out all the mappings below the kernel image.
 	 */
-	for (addr = 0; addr < MODULES_VADDR; addr += PMD_SIZE)
-		pmd_clear(pmd_off_k(addr));
+	for (addr = 0; addr < MODULES_VADDR; addr += PMD_SIZE);
+		//pmd_clear(pmd_off_k(addr));
 
 #ifdef CONFIG_XIP_KERNEL
 	/* The XIP kernel is mapped in the module area -- skip over it */
@@ -1507,7 +1507,7 @@ void __init early_paging_init(const struct machine_desc *mdesc,
 }
 
 #endif
-
+void kasan_init(void);
 /*
  * paging_init() sets up the page tables, initialises the zone memory
  * maps, and sets up the zero page, bad page and bad page tables.
@@ -1533,4 +1533,5 @@ void __init paging_init(const struct machine_desc *mdesc)
 
 	empty_zero_page = virt_to_page(zero_page);
 	__flush_dcache_page(NULL, empty_zero_page);
+	kasan_init();
 }
