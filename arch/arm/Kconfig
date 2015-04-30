@@ -32,6 +32,7 @@ config ARM
 	select HAVE_ARCH_AUDITSYSCALL if (AEABI && !OABI_COMPAT)
 	select HAVE_ARCH_BITREVERSE if (CPU_32v7M || CPU_32v7) && !CPU_32v6
 	select HAVE_ARCH_JUMP_LABEL if !XIP_KERNEL
+	select HAVE_ARCH_KASAN
 	select HAVE_ARCH_KGDB
 	select HAVE_ARCH_SECCOMP_FILTER if (AEABI && !OABI_COMPAT)
 	select HAVE_ARCH_TRACEHOOK
@@ -1448,6 +1449,12 @@ config PAGE_OFFSET
 	default 0x40000000 if VMSPLIT_1G
 	default 0x80000000 if VMSPLIT_2G
 	default 0xC0000000
+
+config KASAN_SHADOW_OFFSET
+	hex
+	default 0x1f000000 if VMSPLIT_1G
+	default 0x5f000000 if VMSPLIT_2G
+	default 0x9f000000
 
 config NR_CPUS
 	int "Maximum number of CPUs (2-32)"
