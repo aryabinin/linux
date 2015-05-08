@@ -521,7 +521,7 @@ ENTRY(phys_base)
 	.endr
 
 NEXT_PAGE(kasan_zero_pte)
-	FILL(kasan_zero_page - __START_KERNEL_map + _KERNPG_TABLE, 512)
+	FILL(kasan_zero_page - __START_KERNEL_map + __PAGE_KERNEL, 512)
 NEXT_PAGE(kasan_zero_pmd)
 	FILL(kasan_zero_pte - __START_KERNEL_map + _KERNPG_TABLE, 512)
 NEXT_PAGE(kasan_zero_pud)
