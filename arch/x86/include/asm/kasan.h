@@ -14,13 +14,11 @@
 
 #ifndef __ASSEMBLY__
 
-extern pte_t kasan_zero_pte[];
-extern pmd_t kasan_zero_pmd[];
-extern pud_t kasan_zero_pud[];
-
 #ifdef CONFIG_KASAN
-void __init kasan_map_early_shadow(pgd_t *pgd);
-void __init kasan_init(void);
+#include <asm/pgtable_types.h>
+
+void kasan_map_early_shadow(pgd_t *pgd);
+void kasan_init(void);
 #else
 static inline void kasan_map_early_shadow(pgd_t *pgd) { }
 static inline void kasan_init(void) { }
