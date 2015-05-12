@@ -12,9 +12,9 @@
 extern pgd_t early_level4_pgt[PTRS_PER_PGD];
 extern struct range pfn_mapped[E820_X_MAX];
 
-static pud_t kasan_zero_pud[PTRS_PER_PUD] __page_aligned_bss;
-static pmd_t kasan_zero_pmd[PTRS_PER_PMD] __page_aligned_bss;
-static pte_t kasan_zero_pte[PTRS_PER_PTE] __page_aligned_bss;
+pud_t kasan_zero_pud[PTRS_PER_PUD] __page_aligned_bss;
+pmd_t kasan_zero_pmd[PTRS_PER_PMD] __page_aligned_bss;
+pte_t kasan_zero_pte[PTRS_PER_PTE] __page_aligned_bss;
 
 /*
  * This page used as early shadow. We don't use empty_zero_page
@@ -24,7 +24,7 @@ static pte_t kasan_zero_pte[PTRS_PER_PTE] __page_aligned_bss;
  * that allowed to access, but not instrumented by kasan
  * (vmalloc/vmemmap ...).
  */
-static unsigned char kasan_zero_page[PAGE_SIZE] __page_aligned_bss;
+unsigned char kasan_zero_page[PAGE_SIZE] __page_aligned_bss;
 
 static int __init map_range(struct range *range)
 {
