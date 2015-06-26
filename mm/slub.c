@@ -1209,6 +1209,7 @@ static int register_quarantine_shrinker(struct kmem_cache *s)
 
 		return register_shrinker(&qs->shrinker);
 	}
+	s->flags &= ~SLAB_QUARANTINE;
 	return 0;
 }
 
