@@ -131,6 +131,13 @@ extern void cpu_resume(void);
 		pg &= ~(PTRS_PER_PGD*sizeof(pgd_t)-1);	\
 		(pgd_t *)phys_to_virt(pg);		\
 	})
+#define cpu_set_ttbr(nr, val)					\
+	do {							\
+		u64 ttbr = val;					\
+		__asm__("mcr	p15, 0, %0, c2, c0, 0"		\
+			: : "r" (ttbr));			\
+	} while (0)
+
 #else
 #define cpu_set_ttbr(nr, val)					\
 	do {							\

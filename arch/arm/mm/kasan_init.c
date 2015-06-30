@@ -58,7 +58,7 @@ static void __init kasan_early_pud_populate(unsigned long start, unsigned long e
 
 	pud = pud_offset(pgd, start);
 	for (addr = start; addr < end;) {
-		pud_populate(&init_mm, pud, kasan_zero_pmd);
+		//pud_populate(&init_mm, pud, kasan_zero_pmd);
 		next = pud_addr_end(addr, end);
 		kasan_early_pmd_populate(addr, next, pud);
 		addr = next;
@@ -78,11 +78,12 @@ void __init kasan_map_early_shadow(pgd_t *pgdp)
 	for (i = 0; i < PTRS_PER_PTE; i++)
 		set_pte_at(&init_mm, KASAN_SHADOW_START + i*PAGE_SIZE,
 			&kasan_zero_pte[i], pfn_pte(
-				virt_to_pfn(kasan_zero_page), __pgprot(_L_PTE_DEFAULT | L_PTE_DIRTY | L_PTE_XN)));
+				virt_to_pfn(kasan_zero_page),
+				__pgprot(_L_PTE_DEFAULT | L_PTE_DIRTY | L_PTE_XN | PTE_EXT_AF)));
 
 	pgd = pgd_offset_k(start);
 	for (addr = start; addr < end;) {
-		pgd_populate(&init_mm, pgd, kasan_zero_pud);
+		//pgd_populate(&init_mm, pgd, kasan_zero_pud);
 		next = pgd_addr_end(addr, end);
 		kasan_early_pud_populate(addr, next, pgd);
 		addr = next;
@@ -115,9 +116,10 @@ void __init kasan_early_init(void)
 static void __init clear_pgds(unsigned long start,
 			unsigned long end)
 {
-	for (; start && start < end; start += PGDIR_SIZE)
-		pmd_clear(pmd_offset(pud_offset(pgd_offset_k(start), start),
-					start));
+	unsigned long old_start = start;
+
+	for (; start && start < end; start += PMD_SIZE)
+		pmd_clear(pmd_off_k(start));
 }
 
 pte_t * __meminit kasan_pte_populate(pmd_t *pmd, unsigned long addr, int node)
@@ -128,7 +130,8 @@ pte_t * __meminit kasan_pte_populate(pmd_t *pmd, unsigned long addr, int node)
 		void *p = kasan_alloc_block(PAGE_SIZE, node);
 		if (!p)
 			return NULL;
-		entry = pfn_pte(virt_to_pfn(p), PAGE_KERNEL);
+		pr_err("populating pte addr %lx\n", addr);
+		entry = pfn_pte(virt_to_pfn(p), __pgprot(_L_PTE_DEFAULT | L_PTE_DIRTY | L_PTE_XN | PTE_EXT_AF));
 		set_pte_at(&init_mm, addr, pte, entry);
 	}
 	return pte;
@@ -141,6 +144,7 @@ pmd_t * __meminit kasan_pmd_populate(pud_t *pud, unsigned long addr, int node)
 		void *p = kasan_alloc_block(PAGE_SIZE, node);
 		if (!p)
 			return NULL;
+		pr_err("populating pmd addr %lx\n", addr);
 		pmd_populate_kernel(&init_mm, pmd, p);
 	}
 	return pmd;
@@ -153,6 +157,7 @@ pud_t * __meminit kasan_pud_populate(pgd_t *pgd, unsigned long addr, int node)
 		void *p = kasan_alloc_block(PAGE_SIZE, node);
 		if (!p)
 			return NULL;
+		pr_err("populating pud addr %lx\n", addr);
 		pud_populate(&init_mm, pud, p);
 	}
 	return pud;
@@ -177,7 +182,7 @@ static int __init create_mapping(unsigned long start, unsigned long end, int nod
 	pud_t *pud;
 	pmd_t *pmd;
 	pte_t *pte;
-
+	pr_info("populating shadow for %lx, %lx\n", start, end);
 	for (; addr < end; addr += PAGE_SIZE) {
 		pgd = kasan_pgd_populate(addr, node);
 		if (!pgd)
@@ -201,11 +206,18 @@ static int __init create_mapping(unsigned long start, unsigned long end, int nod
 void __init kasan_init(void)
 {
 	struct memblock_region *reg;
+
+#ifdef CONFIG_ARM_LPAE
+	memcpy pgd_offset(&inti_mm, KASAN_SHADOW_START)
+
+#else
+
 	memcpy(tmp_page_table, swapper_pg_dir, sizeof(tmp_page_table));
 	cpu_set_ttbr(1, __pa(tmp_page_table));
+	flush_cache_all();
 	local_flush_bp_all();
 	local_flush_tlb_all();
-
+#endif
 	clear_pgds(KASAN_SHADOW_START, KASAN_SHADOW_END);
 
 	kasan_populate_zero_shadow(
@@ -233,10 +245,12 @@ void __init kasan_init(void)
 			NUMA_NO_NODE);
 	}
 
-	memset(kasan_zero_page, 0, PAGE_SIZE);
 	cpu_set_ttbr(1, __pa(swapper_pg_dir));
 	flush_cache_all();
 	local_flush_bp_all();
 	local_flush_tlb_all();
+	memset(kasan_zero_page, 0, PAGE_SIZE);
+	pr_info("Kernel address sanitizer initialized\n");
 	init_task.kasan_depth = 0;
+	pr_info("kasan_zero_pte %p, kasan_zero_pmd %p, \n", &kasan_zero_pte, &kasan_zero_pmd);
 }
