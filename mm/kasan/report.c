@@ -165,11 +165,11 @@ static void print_shadow_for_address(const void *addr)
 		snprintf(buffer, sizeof(buffer),
 			(i == 0) ? ">%p: " : " %p: ", kaddr);
 
-		kasan_disable_current();
+//		kasan_disable_current();
 		print_hex_dump(KERN_ERR, buffer,
 			DUMP_PREFIX_NONE, SHADOW_BYTES_PER_ROW, 1,
 			shadow_row, SHADOW_BYTES_PER_ROW, 0);
-		kasan_enable_current();
+//		kasan_enable_current();
 
 		if (row_is_guilty(shadow_row, shadow))
 			pr_err("%*c\n",
@@ -189,6 +189,7 @@ void kasan_report_error(struct kasan_access_info *info)
 	spin_lock_irqsave(&report_lock, flags);
 	pr_err("================================="
 		"=================================\n");
+	pr_err("stack pointer %lx\n", current_stack_pointer);
 	print_error_description(info);
 	print_address_description(info);
 	print_shadow_for_address(info->first_bad_addr);
@@ -219,15 +220,20 @@ void kasan_report(unsigned long addr, size_t size,
 		bool is_write, unsigned long ip)
 {
 	struct kasan_access_info info;
+	static int a;
+	if(a++)
+		return;
 
 	if (likely(!kasan_enabled()))
 		return;
 
+	kasan_disable_current();
 	info.access_addr = (void *)addr;
 	info.access_size = size;
 	info.is_write = is_write;
 	info.ip = ip;
 	kasan_report_error(&info);
+	kasan_enable_current();
 }
 
 

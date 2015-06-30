@@ -240,7 +240,7 @@ static __always_inline void check_memory_region(unsigned long addr,
 
 	if (unlikely(size == 0))
 		return;
-
+	return;
 	if (unlikely((void *)addr <
 		kasan_shadow_to_mem((void *)KASAN_SHADOW_START))) {
 		info.access_addr = (void *)addr;
