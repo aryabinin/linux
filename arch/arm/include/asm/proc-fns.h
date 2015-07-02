@@ -134,7 +134,7 @@ extern void cpu_resume(void);
 #define cpu_set_ttbr(nr, val)					\
 	do {							\
 		u64 ttbr = val;					\
-		__asm__("mcr	p15, 0, %0, c2, c0, 0"		\
+		__asm__("mcr	p15, " #nr ", %0, c2, c0, 0"		\
 			: : "r" (ttbr));			\
 	} while (0)
 

@@ -79,7 +79,7 @@ void __init kasan_map_early_shadow(pgd_t *pgdp)
 		set_pte_at(&init_mm, KASAN_SHADOW_START + i*PAGE_SIZE,
 			&kasan_zero_pte[i], pfn_pte(
 				virt_to_pfn(kasan_zero_page),
-				__pgprot(_L_PTE_DEFAULT | L_PTE_DIRTY | L_PTE_XN | PTE_EXT_AF)));
+				__pgprot(_L_PTE_DEFAULT | L_PTE_DIRTY | L_PTE_XN)));
 
 	pgd = pgd_offset_k(start);
 	for (addr = start; addr < end;) {
@@ -130,8 +130,7 @@ pte_t * __meminit kasan_pte_populate(pmd_t *pmd, unsigned long addr, int node)
 		void *p = kasan_alloc_block(PAGE_SIZE, node);
 		if (!p)
 			return NULL;
-		pr_err("populating pte addr %lx\n", addr);
-		entry = pfn_pte(virt_to_pfn(p), __pgprot(_L_PTE_DEFAULT | L_PTE_DIRTY | L_PTE_XN | PTE_EXT_AF));
+		entry = pfn_pte(virt_to_pfn(p), __pgprot(_L_PTE_DEFAULT | L_PTE_DIRTY | L_PTE_XN));
 		set_pte_at(&init_mm, addr, pte, entry);
 	}
 	return pte;
@@ -144,7 +143,6 @@ pmd_t * __meminit kasan_pmd_populate(pud_t *pud, unsigned long addr, int node)
 		void *p = kasan_alloc_block(PAGE_SIZE, node);
 		if (!p)
 			return NULL;
-		pr_err("populating pmd addr %lx\n", addr);
 		pmd_populate_kernel(&init_mm, pmd, p);
 	}
 	return pmd;
@@ -202,23 +200,41 @@ static int __init create_mapping(unsigned long start, unsigned long end, int nod
 	}
 	return 0;
 }
+#define cpu_set_ttbr_lpae(nr, val)					\
+	do {							\
+		u64 ttbr = val;					\
+		__asm__("mcrr	p15, "#nr", %0, %1, c2"		\
+			: : "r" (ttbr), "r" (ttbr>>32));	\
+	} while (0)
 
+#define cpu_set_ttbr2(nr, val)					\
+	do {							\
+		u64 ttbr = val;					\
+		__asm__("mcr	p15, " #nr ", %0, c2, c0, 0"		\
+			: : "r" (ttbr));			\
+	} while (0)
+
+pmd_t tmp_pmd_table[PTRS_PER_PMD] __page_aligned_bss;
 void __init kasan_init(void)
 {
 	struct memblock_region *reg;
-
+	pr_info("ttbr0 %llx, ttbr1 %llx %llx\n", cpu_get_ttbr(0), cpu_get_ttbr(1), __pa(tmp_page_table));
 #ifdef CONFIG_ARM_LPAE
-	memcpy pgd_offset(&inti_mm, KASAN_SHADOW_START)
+	memcpy(tmp_pmd_table, pgd_offset(&init_mm, KASAN_SHADOW_START), sizeof(tmp_pmd_table));
+	memcpy(tmp_page_table, swapper_pg_dir, sizeof(tmp_page_table));
+	set_pgd(&tmp_page_table[pgd_index(KASAN_SHADOW_START)], __pgd(__pa(tmp_pmd_table) | PMD_TYPE_TABLE | L_PGD_SWAPPER));
+	cpu_set_ttbr_lpae(0, __pa(tmp_page_table));
 
 #else
-
 	memcpy(tmp_page_table, swapper_pg_dir, sizeof(tmp_page_table));
 	cpu_set_ttbr(1, __pa(tmp_page_table));
+	cpu_set_ttbr(0, __pa(tmp_page_table));
+#endif
 	flush_cache_all();
 	local_flush_bp_all();
 	local_flush_tlb_all();
-#endif
-	clear_pgds(KASAN_SHADOW_START, KASAN_SHADOW_END);
+
+//	clear_pgds(KASAN_SHADOW_START, KASAN_SHADOW_END);
 
 	kasan_populate_zero_shadow(
 		kasan_mem_to_shadow((void *)KASAN_SHADOW_START),
@@ -245,6 +261,7 @@ void __init kasan_init(void)
 			NUMA_NO_NODE);
 	}
 
+	cpu_set_ttbr(0, __pa(swapper_pg_dir));
 	cpu_set_ttbr(1, __pa(swapper_pg_dir));
 	flush_cache_all();
 	local_flush_bp_all();
