@@ -220,7 +220,7 @@ void __init kasan_init(void)
 	struct memblock_region *reg;
 	pr_info("ttbr0 %llx, ttbr1 %llx %llx\n", cpu_get_ttbr(0), cpu_get_ttbr(1), __pa(tmp_page_table));
 #ifdef CONFIG_ARM_LPAE
-	memcpy(tmp_pmd_table, pgd_offset(&init_mm, KASAN_SHADOW_START), sizeof(tmp_pmd_table));
+	memcpy(tmp_pmd_table, pgd_page_vaddr(*pgd_offset_k(KASAN_SHADOW_START)), sizeof(tmp_pmd_table));
 	memcpy(tmp_page_table, swapper_pg_dir, sizeof(tmp_page_table));
 	set_pgd(&tmp_page_table[pgd_index(KASAN_SHADOW_START)], __pgd(__pa(tmp_pmd_table) | PMD_TYPE_TABLE | L_PGD_SWAPPER));
 	cpu_set_ttbr_lpae(0, __pa(tmp_page_table));
@@ -234,7 +234,7 @@ void __init kasan_init(void)
 	local_flush_bp_all();
 	local_flush_tlb_all();
 
-//	clear_pgds(KASAN_SHADOW_START, KASAN_SHADOW_END);
+	clear_pgds(KASAN_SHADOW_START, KASAN_SHADOW_END);
 
 	kasan_populate_zero_shadow(
 		kasan_mem_to_shadow((void *)KASAN_SHADOW_START),
@@ -261,8 +261,8 @@ void __init kasan_init(void)
 			NUMA_NO_NODE);
 	}
 
-	cpu_set_ttbr(0, __pa(swapper_pg_dir));
-	cpu_set_ttbr(1, __pa(swapper_pg_dir));
+	cpu_set_ttbr_lpae(0, __pa(swapper_pg_dir));
+
 	flush_cache_all();
 	local_flush_bp_all();
 	local_flush_tlb_all();
