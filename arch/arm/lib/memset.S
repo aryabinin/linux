@@ -17,6 +17,8 @@
 	.align	5
 
 ENTRY(mmioset)
+	.weak memset
+ENTRY(__memset)
 ENTRY(memset)
 UNWIND( .fnstart         )
 	ands	r3, r0, #3		@ 1 unaligned?
@@ -135,3 +137,4 @@ UNWIND( .fnstart            )
 UNWIND( .fnend   )
 ENDPROC(memset)
 ENDPROC(mmioset)
+ENDPROC(__memset)
