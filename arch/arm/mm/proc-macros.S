@@ -32,6 +32,9 @@
 	.macro	act_mm, rd
 	bic	\rd, sp, #8128
 	bic	\rd, \rd, #63
+#ifdef CONFIG_KASAN
+	bic	\rd, \rd, #8192
+#endif
 	ldr	\rd, [\rd, #TI_TASK]
 	ldr	\rd, [\rd, #TSK_ACTIVE_MM]
 	.endm
