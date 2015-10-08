@@ -68,16 +68,6 @@
 #define DIV_ROUND_UP_ULL(ll,d) \
 	({ unsigned long long _tmp = (ll)+(d)-1; do_div(_tmp, d); _tmp; })
 
-#include <linux/kasan.h>
-#define READ_ONCE_NOCHECK(x)					\
-({								\
-	union { typeof(x) __val; char __c[1]; } __u;		\
-	kasan_disable_local();					\
-	__read_once_size(&(x), __u.__c, sizeof(x));		\
-	kasan_enable_local();					\
-	__u.__val;						\
-})
-
 #if BITS_PER_LONG == 32
 # define DIV_ROUND_UP_SECTOR_T(ll,d) DIV_ROUND_UP_ULL(ll, d)
 #else
