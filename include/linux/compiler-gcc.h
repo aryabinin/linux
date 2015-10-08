@@ -237,6 +237,10 @@
 #define KASAN_ABI_VERSION 3
 #endif
 
+#if GCC_VERSION >= 40902
+#define __no_sanitize_address __attribute__((no_sanitize_address))
+#endif
+
 #endif	/* gcc version >= 40000 specific checks */
 
 #if !defined(__noclone)
