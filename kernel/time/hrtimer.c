@@ -307,7 +307,7 @@ EXPORT_SYMBOL_GPL(__ktime_divns);
  */
 ktime_t ktime_add_safe(const ktime_t lhs, const ktime_t rhs)
 {
-	ktime_t res = ktime_add(lhs, rhs);
+	ktime_t res = { .tv64 = (u64)lhs.tv64 + (u64)rhs.tv64 };
 
 	/*
 	 * We use KTIME_SEC_MAX here, the maximum timeout which we can
