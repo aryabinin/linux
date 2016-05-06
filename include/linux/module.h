@@ -330,6 +330,15 @@ struct mod_kallsyms {
 	char *strtab;
 };
 
+#ifdef CONFIG_LIVEPATCH
+struct klp_modinfo {
+	Elf_Ehdr hdr;
+	Elf_Shdr *sechdrs;
+	char *secstrings;
+	unsigned int symndx;
+};
+#endif
+
 struct module {
 	enum module_state state;
 
@@ -456,7 +465,11 @@ struct module {
 #endif
 
 #ifdef CONFIG_LIVEPATCH
+	bool klp; /* Is this a livepatch module? */
 	bool klp_alive;
+
+	/* Elf information */
+	struct klp_modinfo *klp_info;
 #endif
 
 #ifdef CONFIG_MODULE_UNLOAD
@@ -562,8 +575,8 @@ int module_kallsyms_on_each_symbol(int (*fn)(void *, const char *,
 					     struct module *, unsigned long),
 				   void *data);
 
-extern void __module_put_and_exit(struct module *mod, long code)
-	__attribute__((noreturn));
+extern void __noreturn __module_put_and_exit(struct module *mod,
+			long code);
 #define module_put_and_exit(code) __module_put_and_exit(THIS_MODULE, code)
 
 #ifdef CONFIG_MODULE_UNLOAD
@@ -629,6 +642,18 @@ static inline bool module_requested_async_probing(struct module *module)
 {
 	return module && module->async_probe_requested;
 }
+
+#ifdef CONFIG_LIVEPATCH
+static inline bool is_livepatch_module(struct module *mod)
+{
+	return mod->klp;
+}
+#else /* !CONFIG_LIVEPATCH */
+static inline bool is_livepatch_module(struct module *mod)
+{
+	return false;
+}
+#endif /* CONFIG_LIVEPATCH */
 
 #else /* !CONFIG_MODULES... */
 

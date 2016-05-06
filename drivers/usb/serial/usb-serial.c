@@ -254,7 +254,7 @@ static int serial_open(struct tty_struct *tty, struct file *filp)
  *
  * Shut down a USB serial port. Serialized against activate by the
  * tport mutex and kept to matching open/close pairs
- * of calls by the ASYNCB_INITIALIZED flag.
+ * of calls by the initialized flag.
  *
  * Not called if tty is console.
  */
@@ -815,7 +815,7 @@ static int usb_serial_probe(struct usb_interface *interface,
 		}
 	}
 
-#if defined(CONFIG_USB_SERIAL_PL2303) || defined(CONFIG_USB_SERIAL_PL2303_MODULE)
+#if IS_ENABLED(CONFIG_USB_SERIAL_PL2303)
 	/* BEGIN HORRIBLE HACK FOR PL2303 */
 	/* this is needed due to the looney way its endpoints are set up */
 	if (((le16_to_cpu(dev->descriptor.idVendor) == PL2303_VENDOR_ID) &&

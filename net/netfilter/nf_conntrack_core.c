@@ -12,6 +12,8 @@
  * published by the Free Software Foundation.
  */
 
+#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+
 #include <linux/types.h>
 #include <linux/netfilter.h>
 #include <linux/module.h>
@@ -67,6 +69,7 @@ __cacheline_aligned_in_smp DEFINE_SPINLOCK(nf_conntrack_expect_lock);
 EXPORT_SYMBOL_GPL(nf_conntrack_expect_lock);
 
 static __read_mostly spinlock_t nf_conntrack_locks_all_lock;
+static __read_mostly seqcount_t nf_conntrack_generation;
 static __read_mostly bool nf_conntrack_locks_all;
 
 void nf_conntrack_lock(spinlock_t *lock) __acquires(lock)
@@ -105,7 +108,7 @@ static bool nf_conntrack_double_lock(struct net *net, unsigned int h1,
 		spin_lock_nested(&nf_conntrack_locks[h1],
 				 SINGLE_DEPTH_NESTING);
 	}
-	if (read_seqcount_retry(&net->ct.generation, sequence)) {
+	if (read_seqcount_retry(&nf_conntrack_generation, sequence)) {
 		nf_conntrack_double_unlock(h1, h2);
 		return true;
 	}
@@ -139,12 +142,13 @@ EXPORT_SYMBOL_GPL(nf_conntrack_max);
 DEFINE_PER_CPU(struct nf_conn, nf_conntrack_untracked);
 EXPORT_PER_CPU_SYMBOL(nf_conntrack_untracked);
 
-unsigned int nf_conntrack_hash_rnd __read_mostly;
-EXPORT_SYMBOL_GPL(nf_conntrack_hash_rnd);
+static unsigned int nf_conntrack_hash_rnd __read_mostly;
 
 static u32 hash_conntrack_raw(const struct nf_conntrack_tuple *tuple)
 {
 	unsigned int n;
+
+	get_random_once(&nf_conntrack_hash_rnd, sizeof(nf_conntrack_hash_rnd));
 
 	/* The direction must be ignored, so we hash everything up to the
 	 * destination ports (which is a multiple of 4) and treat the last
@@ -391,7 +395,7 @@ static void nf_ct_delete_from_lists(struct nf_conn *ct)
 
 	local_bh_disable();
 	do {
-		sequence = read_seqcount_begin(&net->ct.generation);
+		sequence = read_seqcount_begin(&nf_conntrack_generation);
 		hash = hash_conntrack(net,
 				      &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple);
 		reply_hash = hash_conntrack(net,
@@ -558,7 +562,7 @@ nf_conntrack_hash_check_insert(struct nf_conn *ct)
 
 	local_bh_disable();
 	do {
-		sequence = read_seqcount_begin(&net->ct.generation);
+		sequence = read_seqcount_begin(&nf_conntrack_generation);
 		hash = hash_conntrack(net,
 				      &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple);
 		reply_hash = hash_conntrack(net,
@@ -626,7 +630,7 @@ __nf_conntrack_confirm(struct sk_buff *skb)
 	local_bh_disable();
 
 	do {
-		sequence = read_seqcount_begin(&net->ct.generation);
+		sequence = read_seqcount_begin(&nf_conntrack_generation);
 		/* reuse the hash saved before */
 		hash = *(unsigned long *)&ct->tuplehash[IP_CT_DIR_REPLY].hnnode.pprev;
 		hash = hash_bucket(hash, net);
@@ -769,12 +773,12 @@ static noinline int early_drop(struct net *net, unsigned int _hash)
 
 	local_bh_disable();
 restart:
-	sequence = read_seqcount_begin(&net->ct.generation);
+	sequence = read_seqcount_begin(&nf_conntrack_generation);
 	hash = hash_bucket(_hash, net);
 	for (; i < net->ct.htable_size; i++) {
 		lockp = &nf_conntrack_locks[hash % CONNTRACK_LOCKS];
 		nf_conntrack_lock(lockp);
-		if (read_seqcount_retry(&net->ct.generation, sequence)) {
+		if (read_seqcount_retry(&nf_conntrack_generation, sequence)) {
 			spin_unlock(lockp);
 			goto restart;
 		}
@@ -812,21 +816,6 @@ restart:
 	return dropped;
 }
 
-void init_nf_conntrack_hash_rnd(void)
-{
-	unsigned int rand;
-
-	/*
-	 * Why not initialize nf_conntrack_rnd in a "init()" function ?
-	 * Because there isn't enough entropy when system initializing,
-	 * and we initialize it as late as possible.
-	 */
-	do {
-		get_random_bytes(&rand, sizeof(rand));
-	} while (!rand);
-	cmpxchg(&nf_conntrack_hash_rnd, 0, rand);
-}
-
 static struct nf_conn *
 __nf_conntrack_alloc(struct net *net,
 		     const struct nf_conntrack_zone *zone,
@@ -835,12 +824,6 @@ __nf_conntrack_alloc(struct net *net,
 		     gfp_t gfp, u32 hash)
 {
 	struct nf_conn *ct;
-
-	if (unlikely(!nf_conntrack_hash_rnd)) {
-		init_nf_conntrack_hash_rnd();
-		/* recompute the hash as nf_conntrack_hash_rnd is initialized */
-		hash = hash_conntrack_raw(orig);
-	}
 
 	/* We don't want any race condition at early drop stage */
 	atomic_inc(&net->ct.count);
@@ -966,7 +949,7 @@ init_conntrack(struct net *net, struct nf_conn *tmpl,
 
 	if (!l4proto->new(ct, skb, dataoff, timeouts)) {
 		nf_conntrack_free(ct);
-		pr_debug("init conntrack: can't track with proto module\n");
+		pr_debug("can't track with proto module\n");
 		return NULL;
 	}
 
@@ -988,7 +971,7 @@ init_conntrack(struct net *net, struct nf_conn *tmpl,
 		spin_lock(&nf_conntrack_expect_lock);
 		exp = nf_ct_find_expectation(net, zone, tuple);
 		if (exp) {
-			pr_debug("conntrack: expectation arrives ct=%p exp=%p\n",
+			pr_debug("expectation arrives ct=%p exp=%p\n",
 				 ct, exp);
 			/* Welcome, Mr. Bond.  We've been expecting you... */
 			__set_bit(IPS_EXPECTED_BIT, &ct->status);
@@ -1053,7 +1036,7 @@ resolve_normal_ct(struct net *net, struct nf_conn *tmpl,
 	if (!nf_ct_get_tuple(skb, skb_network_offset(skb),
 			     dataoff, l3num, protonum, net, &tuple, l3proto,
 			     l4proto)) {
-		pr_debug("resolve_normal_ct: Can't get tuple\n");
+		pr_debug("Can't get tuple\n");
 		return NULL;
 	}
 
@@ -1079,14 +1062,13 @@ resolve_normal_ct(struct net *net, struct nf_conn *tmpl,
 	} else {
 		/* Once we've had two way comms, always ESTABLISHED. */
 		if (test_bit(IPS_SEEN_REPLY_BIT, &ct->status)) {
-			pr_debug("nf_conntrack_in: normal packet for %p\n", ct);
+			pr_debug("normal packet for %p\n", ct);
 			*ctinfo = IP_CT_ESTABLISHED;
 		} else if (test_bit(IPS_EXPECTED_BIT, &ct->status)) {
-			pr_debug("nf_conntrack_in: related packet for %p\n",
-				 ct);
+			pr_debug("related packet for %p\n", ct);
 			*ctinfo = IP_CT_RELATED;
 		} else {
-			pr_debug("nf_conntrack_in: new packet for %p\n", ct);
+			pr_debug("new packet for %p\n", ct);
 			*ctinfo = IP_CT_NEW;
 		}
 		*set_reply = 0;
@@ -1606,7 +1588,7 @@ int nf_conntrack_set_hashsize(const char *val, struct kernel_param *kp)
 
 	local_bh_disable();
 	nf_conntrack_all_lock();
-	write_seqcount_begin(&init_net.ct.generation);
+	write_seqcount_begin(&nf_conntrack_generation);
 
 	/* Lookups in the old hash might happen in parallel, which means we
 	 * might get false negatives during connection lookup. New connections
@@ -1630,7 +1612,7 @@ int nf_conntrack_set_hashsize(const char *val, struct kernel_param *kp)
 	init_net.ct.htable_size = nf_conntrack_htable_size = hashsize;
 	init_net.ct.hash = hash;
 
-	write_seqcount_end(&init_net.ct.generation);
+	write_seqcount_end(&nf_conntrack_generation);
 	nf_conntrack_all_unlock();
 	local_bh_enable();
 
@@ -1655,6 +1637,8 @@ int nf_conntrack_init_start(void)
 {
 	int max_factor = 8;
 	int i, ret, cpu;
+
+	seqcount_init(&nf_conntrack_generation);
 
 	for (i = 0; i < CONNTRACK_LOCKS; i++)
 		spin_lock_init(&nf_conntrack_locks[i]);
@@ -1782,7 +1766,6 @@ int nf_conntrack_init_net(struct net *net)
 	int cpu;
 
 	atomic_set(&net->ct.count, 0);
-	seqcount_init(&net->ct.generation);
 
 	net->ct.pcpu_lists = alloc_percpu(struct ct_pcpu);
 	if (!net->ct.pcpu_lists)

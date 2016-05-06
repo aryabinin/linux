@@ -645,7 +645,7 @@ static u64 sys_addr_to_input_addr(struct mem_ctl_info *mci, u64 sys_addr)
 	input_addr =
 	    dram_addr_to_input_addr(mci, sys_addr_to_dram_addr(mci, sys_addr));
 
-	edac_dbg(2, "SysAdddr 0x%lx translates to InputAddr 0x%lx\n",
+	edac_dbg(2, "SysAddr 0x%lx translates to InputAddr 0x%lx\n",
 		 (unsigned long)sys_addr, (unsigned long)input_addr);
 
 	return input_addr;
@@ -3006,8 +3006,6 @@ static int __init amd64_edac_init(void)
 {
 	int err = -ENODEV;
 
-	printk(KERN_INFO "AMD64 EDAC driver v%s\n", EDAC_AMD64_VERSION);
-
 	opstate_init();
 
 	if (amd_cache_northbridges() < 0)
@@ -3035,6 +3033,8 @@ static int __init amd64_edac_init(void)
 #ifdef CONFIG_X86_32
 	amd64_err("%s on 32-bit is unsupported. USE AT YOUR OWN RISK!\n", EDAC_MOD_STR);
 #endif
+
+	printk(KERN_INFO "AMD64 EDAC driver v%s\n", EDAC_AMD64_VERSION);
 
 	return 0;
 

@@ -673,6 +673,9 @@ next_block:
 					err = reserve_new_block(&dn);
 			} else {
 				err = __allocate_data_block(&dn);
+				if (!err)
+					set_inode_flag(F2FS_I(inode),
+							FI_APPEND_WRITE);
 			}
 			if (err)
 				goto sync_out;
@@ -1177,8 +1180,10 @@ write:
 		goto redirty_out;
 	if (f2fs_is_drop_cache(inode))
 		goto out;
-	if (f2fs_is_volatile_file(inode) && !wbc->for_reclaim &&
-			available_free_memory(sbi, BASE_CHECK))
+	/* we should not write 0'th page having journal header */
+	if (f2fs_is_volatile_file(inode) && (!page->index ||
+			(!wbc->for_reclaim &&
+			available_free_memory(sbi, BASE_CHECK))))
 		goto redirty_out;
 
 	/* Dentry blocks are controlled by checkpoint */
@@ -1496,7 +1501,7 @@ restart:
 		} else {
 			/* hole case */
 			err = get_dnode_of_data(&dn, index, LOOKUP_NODE);
-			if (err || (!err && dn.data_blkaddr == NULL_ADDR)) {
+			if (err || dn.data_blkaddr == NULL_ADDR) {
 				f2fs_put_dnode(&dn);
 				f2fs_lock_op(sbi);
 				locked = true;
@@ -1665,12 +1670,12 @@ static int check_direct_IO(struct inode *inode, struct iov_iter *iter,
 	return 0;
 }
 
-static ssize_t f2fs_direct_IO(struct kiocb *iocb, struct iov_iter *iter,
-			      loff_t offset)
+static ssize_t f2fs_direct_IO(struct kiocb *iocb, struct iov_iter *iter)
 {
 	struct address_space *mapping = iocb->ki_filp->f_mapping;
 	struct inode *inode = mapping->host;
 	size_t count = iov_iter_count(iter);
+	loff_t offset = iocb->ki_pos;
 	int err;
 
 	err = check_direct_IO(inode, iter, offset);
@@ -1682,9 +1687,13 @@ static ssize_t f2fs_direct_IO(struct kiocb *iocb, struct iov_iter *iter,
 
 	trace_f2fs_direct_IO_enter(inode, offset, count, iov_iter_rw(iter));
 
-	err = blockdev_direct_IO(iocb, inode, iter, offset, get_data_block_dio);
-	if (err < 0 && iov_iter_rw(iter) == WRITE)
-		f2fs_write_failed(mapping, offset + count);
+	err = blockdev_direct_IO(iocb, inode, iter, get_data_block_dio);
+	if (iov_iter_rw(iter) == WRITE) {
+		if (err > 0)
+			set_inode_flag(F2FS_I(inode), FI_UPDATE_WRITE);
+		else if (err < 0)
+			f2fs_write_failed(mapping, offset + count);
+	}
 
 	trace_f2fs_direct_IO_exit(inode, offset, count, iov_iter_rw(iter), err);
 
@@ -1714,6 +1723,7 @@ void f2fs_invalidate_page(struct page *page, unsigned int offset,
 	if (IS_ATOMIC_WRITTEN_PAGE(page))
 		return;
 
+	set_page_private(page, 0);
 	ClearPagePrivate(page);
 }
 
@@ -1727,6 +1737,7 @@ int f2fs_release_page(struct page *page, gfp_t wait)
 	if (IS_ATOMIC_WRITTEN_PAGE(page))
 		return 0;
 
+	set_page_private(page, 0);
 	ClearPagePrivate(page);
 	return 1;
 }
