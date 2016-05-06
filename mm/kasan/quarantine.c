@@ -37,8 +37,8 @@
  * objects inside of it.
  */
 struct qlist {
-	void **head;
-	void **tail;
+	void *head;
+	void *tail;
 	size_t bytes;
 };
 
