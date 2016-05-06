@@ -182,16 +182,6 @@ static void vibra_play_work(struct work_struct *work)
 	struct vibra_info *info = container_of(work,
 				struct vibra_info, play_work);
 	int ret;
-<<<<<<< HEAD
-
-	/* Do not allow effect, while the routing is set to use audio */
-	ret = twl6040_get_vibralr_status(info->twl6040);
-	if (ret & TWL6040_VIBSEL) {
-		dev_info(info->dev, "Vibra is configured for audio\n");
-		return;
-	}
-=======
->>>>>>> linux-next/akpm-base
 
 	/* Do not allow effect, while the routing is set to use audio */
 	ret = twl6040_get_vibralr_status(info->twl6040);
