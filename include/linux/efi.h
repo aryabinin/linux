@@ -17,6 +17,7 @@
 #include <linux/types.h>
 #include <linux/proc_fs.h>
 #include <linux/rtc.h>
+#include <linux/screen_info.h>
 #include <linux/ioport.h>
 #include <linux/pfn.h>
 #include <linux/pstore.h>
