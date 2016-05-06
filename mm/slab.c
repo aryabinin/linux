@@ -3547,13 +3547,8 @@ free_done:
 static inline void __cache_free(struct kmem_cache *cachep, void *objp,
 				unsigned long caller)
 {
-#ifdef CONFIG_KASAN
 	if (kasan_slab_free(cachep, objp))
-		/* The object has been put into the quarantine, don't touch it
-		 * for now.
-		 */
 		return;
-#endif
 	___cache_free(cachep, objp, caller);
 }
 
@@ -3731,15 +3726,12 @@ static __always_inline void *
 __do_kmalloc_node(size_t size, gfp_t flags, int node, unsigned long caller)
 {
 	struct kmem_cache *cachep;
-	void *ret;
 
 	cachep = kmalloc_slab(size, flags);
 	if (unlikely(ZERO_OR_NULL_PTR(cachep)))
 		return cachep;
-	ret = kmem_cache_alloc_node_trace(cachep, flags, node, size);
-	kasan_kmalloc(cachep, ret, size, flags);
 
-	return ret;
+	return kmem_cache_alloc_node_trace(cachep, flags, node, size);
 }
 
 void *__kmalloc_node(size_t size, gfp_t flags, int node)

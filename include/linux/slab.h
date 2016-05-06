@@ -366,7 +366,10 @@ kmem_cache_alloc_node_trace(struct kmem_cache *s,
 			      gfp_t gfpflags,
 			      int node, size_t size)
 {
-	return kmem_cache_alloc_trace(s, gfpflags, size);
+	void *ret = kmem_cache_alloc_trace(s, gfpflags, size);
+
+	kasan_kmalloc(s, ret, size, flags);
+	return ret;
 }
 #endif /* CONFIG_NUMA */
 

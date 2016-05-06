@@ -113,8 +113,7 @@ static inline void kasan_krealloc(const void *object, size_t new_size,
 
 static inline void kasan_slab_alloc(struct kmem_cache *s, void *object,
 				   gfp_t flags) {}
-/* kasan_slab_free() returns true if the object has been put into quarantine.
- */
+
 static inline bool kasan_slab_free(struct kmem_cache *s, void *object)
 {
 	return false;
