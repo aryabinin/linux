@@ -872,9 +872,9 @@ int ehci_hub_control(
 ) {
 	struct ehci_hcd	*ehci = hcd_to_ehci (hcd);
 	int		ports = HCS_N_PORTS (ehci->hcs_params);
-	u32 __iomem	*status_reg = &ehci->regs->port_status[
-				(wIndex & 0xff) - 1];
-	u32 __iomem	*hostpc_reg = &ehci->regs->hostpc[(wIndex & 0xff) - 1];
+	u32 __iomem	*status_reg = ehci->regs->port_status +
+				(wIndex & 0xff) - 1;
+	u32 __iomem	*hostpc_reg = ehci->regs->hostpc + (wIndex & 0xff) - 1;
 	u32		temp, temp1, status;
 	unsigned long	flags;
 	int		retval = 0;
