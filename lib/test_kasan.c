@@ -433,6 +433,12 @@ static noinline void __init copy_user_test(void)
 	pr_info("out-of-bounds in strncpy_from_user()\n");
 	unused = strncpy_from_user(kmem, usermem, size + 1);
 
+        pr_info("out-of-bounds in get_user()\n");
+	get_user(*(unsigned long *)(kmem+size+1), usermem);
+
+        pr_info("out-of-bounds in put_user()\n");
+	put_user(*(unsigned long *)(kmem+size+1), usermem);
+
 	vm_munmap((unsigned long)usermem, PAGE_SIZE);
 	kfree(kmem);
 }
