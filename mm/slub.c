@@ -1319,7 +1319,7 @@ static inline void kmalloc_large_node_hook(void *ptr, size_t size, gfp_t flags)
 static inline void kfree_hook(const void *x)
 {
 	kmemleak_free(x);
-	kasan_poison_kfree_large(x);
+	kasan_kfree_large(x);
 }
 
 static inline void slab_free_hook(struct kmem_cache *s, void *x)

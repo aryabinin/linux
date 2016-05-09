@@ -327,7 +327,7 @@ void kasan_alloc_pages(struct page *page, unsigned int order)
 		kasan_unpoison_shadow(page_address(page), PAGE_SIZE << order);
 }
 
-void kasan_poison_free_pages(struct page *page, unsigned int order)
+void kasan_free_pages(struct page *page, unsigned int order)
 {
 	if (likely(!PageHighMem(page)))
 		kasan_poison_shadow(page_address(page),
@@ -618,7 +618,7 @@ void kasan_krealloc(const void *object, size_t size, gfp_t flags)
 		kasan_kmalloc(page->slab_cache, object, size, flags);
 }
 
-void kasan_poison_kfree(void *ptr)
+void kasan_kfree(void *ptr)
 {
 	struct page *page;
 
@@ -631,7 +631,7 @@ void kasan_poison_kfree(void *ptr)
 		kasan_slab_free(page->slab_cache, ptr);
 }
 
-void kasan_poison_kfree_large(const void *ptr)
+void kasan_kfree_large(const void *ptr)
 {
 	struct page *page = virt_to_page(ptr);
 
