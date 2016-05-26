@@ -23,6 +23,7 @@
  */
 #include <linux/string.h>
 #include <linux/thread_info.h>
+#include <linux/kasan-checks.h>
 
 #include <asm/alternative.h>
 #include <asm/cpufeature.h>
@@ -263,6 +264,8 @@ extern unsigned long __must_check __clear_user(void __user *addr, unsigned long 
 
 static inline unsigned long __must_check copy_from_user(void *to, const void __user *from, unsigned long n)
 {
+	kasan_check_write(to, n);
+
 	if (access_ok(VERIFY_READ, from, n))
 		n = __copy_from_user(to, from, n);
 	else /* security hole - plug it */
@@ -272,6 +275,8 @@ static inline unsigned long __must_check copy_from_user(void *to, const void __u
 
 static inline unsigned long __must_check copy_to_user(void __user *to, const void *from, unsigned long n)
 {
+	kasan_check_read(from, n);
+
 	if (access_ok(VERIFY_WRITE, to, n))
 		n = __copy_to_user(to, from, n);
 	return n;
@@ -284,8 +289,17 @@ static inline unsigned long __must_check copy_in_user(void __user *to, const voi
 	return n;
 }
 
-#define __copy_to_user_inatomic __copy_to_user
-#define __copy_from_user_inatomic __copy_from_user
+static inline unsigned long __copy_to_user_inatomic(void __user *to, const void *from, unsigned long n)
+{
+	kasan_check_read(from, n);
+	return __copy_to_user(to, from, n);
+}
+
+static inline unsigned long __copy_from_user_inatomic(void *to, const void __user *from, unsigned long n)
+{
+	kasan_check_write(to, n);
+	return __copy_from_user(to, from, n);
+}
 
 static inline unsigned long __must_check clear_user(void __user *to, unsigned long n)
 {
