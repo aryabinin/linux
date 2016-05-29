@@ -411,6 +411,49 @@ static noinline void __init copy_user_test(void)
 	kfree(kmem);
 }
 
+#ifdef CONFIG_SLAB
+static void try_free(void *p)
+{
+	kfree(p);
+}
+
+static void __init kasan_double_free_concurrent(void)
+{
+#define MAX_THREADS 3
+	char *p;
+	int cpu, cnt = num_online_cpus();
+	cpumask_t mask = { CPU_BITS_NONE };
+	size_t size = 4097;     /* must be <= KMALLOC_MAX_CACHE_SIZE/2 */
+
+	if (cnt == 1)
+		return;
+	cnt = cnt < MAX_THREADS ? cnt : MAX_THREADS;
+	pr_info("concurrent double-free (%d threads)\n", cnt);
+	p = kmalloc(size, GFP_KERNEL);
+	if (!p)
+		return;
+	for_each_online_cpu(cpu) {
+		cpumask_set_cpu(cpu, &mask);
+		if (!--cnt)
+			break;
+	}
+	on_each_cpu_mask(&mask, try_free, p, 0);
+}
+
+static noinline void __init kasan_double_free(void)
+{
+	char *p;
+	size_t size = 2049;
+
+	pr_info("double-free\n");
+	p = kmalloc(size, GFP_KERNEL);
+	if (!p)
+		return;
+	kfree(p);
+	kfree(p);
+}
+#endif
+
 static int __init kmalloc_tests_init(void)
 {
 	kmalloc_oob_right();
@@ -436,6 +479,10 @@ static int __init kmalloc_tests_init(void)
 	kasan_global_oob();
 	ksize_unpoisons_memory();
 	copy_user_test();
+#ifdef CONFIG_SLAB
+	kasan_double_free();
+	kasan_double_free_concurrent();
+#endif
 	return -EAGAIN;
 }
 
