@@ -431,13 +431,6 @@ void kasan_poison_object_data(struct kmem_cache *cache, void *object)
 	kasan_poison_shadow(object,
 			round_up(cache->object_size, KASAN_SHADOW_SCALE_SIZE),
 			KASAN_KMALLOC_REDZONE);
-#ifdef CONFIG_SLAB
-	if (cache->flags & SLAB_KASAN) {
-		struct kasan_alloc_meta *alloc_info =
-			get_alloc_info(cache, object);
-		alloc_info->state = KASAN_STATE_INIT;
-	}
-#endif
 }
 
 #ifdef CONFIG_SLAB
@@ -501,6 +494,17 @@ struct kasan_free_meta *get_free_info(struct kmem_cache *cache,
 	BUILD_BUG_ON(sizeof(struct kasan_free_meta) > 32);
 	return (void *)object + cache->kasan_info.free_meta_offset;
 }
+
+void kasan_init_slab_obj(struct kmem_cache *cache, const void *object)
+{
+	struct kasan_alloc_meta *alloc_info;
+
+	if (!(cache->flags & SLAB_KASAN))
+		return;
+
+	alloc_info = get_alloc_info(cache, object);
+	__memset(alloc_info, 0, sizeof(*alloc_info));
+}
 #endif
 
 void kasan_slab_alloc(struct kmem_cache *cache, void *object, gfp_t flags)
@@ -523,33 +527,30 @@ static void kasan_poison_slab_free(struct kmem_cache *cache, void *object)
 bool kasan_slab_free(struct kmem_cache *cache, void *object)
 {
 #ifdef CONFIG_SLAB
+	struct kasan_alloc_meta *alloc_info;
+	struct kasan_free_meta *free_info;
+	s8 shadow;
+
 	/* RCU slabs could be legally used after free within the RCU period */
-	if (unlikely(cache->flags & SLAB_DESTROY_BY_RCU))
+	if (unlikely(cache->flags & SLAB_DESTROY_BY_RCU) ||
+		unlikely(!(cache->flags & SLAB_KASAN)))
 		return false;
 
-	if (likely(cache->flags & SLAB_KASAN)) {
-		struct kasan_alloc_meta *alloc_info =
-			get_alloc_info(cache, object);
-		struct kasan_free_meta *free_info =
-			get_free_info(cache, object);
+	alloc_info = get_alloc_info(cache, object);
+	free_info = get_free_info(cache, object);
 
-		switch (alloc_info->state) {
-		case KASAN_STATE_ALLOC:
-			alloc_info->state = KASAN_STATE_QUARANTINE;
-			quarantine_put(free_info, cache);
-			set_track(&free_info->track, GFP_NOWAIT);
-			kasan_poison_slab_free(cache, object);
-			return true;
-		case KASAN_STATE_QUARANTINE:
-		case KASAN_STATE_FREE:
-			pr_err("Double free");
-			dump_stack();
-			break;
-		default:
-			break;
-		}
+	shadow = READ_ONCE(*(s8 *)kasan_mem_to_shadow(object));
+
+	if (shadow < 0 || shadow >= KASAN_SHADOW_SCALE_SIZE) {
+		pr_err("Double free");
+		dump_stack();
+		return true;
 	}
-	return false;
+
+	quarantine_put(free_info, cache);
+	set_track(&alloc_info->free_track, GFP_NOWAIT);
+	kasan_poison_slab_free(cache, object);
+	return true;
 #else
 	kasan_poison_slab_free(cache, object);
 	return false;
@@ -576,14 +577,10 @@ void kasan_kmalloc(struct kmem_cache *cache, const void *object, size_t size,
 	kasan_unpoison_shadow(object, size);
 	kasan_poison_shadow((void *)redzone_start, redzone_end - redzone_start,
 		KASAN_KMALLOC_REDZONE);
-#ifdef CONFIG_SLAB
-	if (cache->flags & SLAB_KASAN) {
-		struct kasan_alloc_meta *alloc_info =
-			get_alloc_info(cache, object);
 
-		alloc_info->state = KASAN_STATE_ALLOC;
-		set_track(&alloc_info->track, flags);
-	}
+#ifdef CONFIG_SLAB
+	if (cache->flags & SLAB_KASAN)
+		set_track(&get_alloc_info(cache, object)->alloc_track, flags);
 #endif
 }
 EXPORT_SYMBOL(kasan_kmalloc);
