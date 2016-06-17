@@ -62,8 +62,13 @@ struct kasan_global {
 #define KASAN_STACK_DEPTH 64
 
 struct kasan_track {
-	u32 pid;
-	depot_stack_handle_t stack;
+union {
+	struct {
+		u32 pid;
+		depot_stack_handle_t stack;
+	};
+	u64 id;
+};
 };
 
 struct kasan_alloc_meta {
@@ -100,6 +105,9 @@ static inline bool kasan_report_enabled(void)
 
 void kasan_report(unsigned long addr, size_t size,
 		bool is_write, unsigned long ip);
+void kasan_report_double_free(struct kmem_cache *cache, void *object,
+			struct kasan_track free_stack, s8 shadow);
+
 
 #ifdef CONFIG_SLAB
 void quarantine_put(struct kasan_free_meta *info, struct kmem_cache *cache);

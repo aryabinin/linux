@@ -116,6 +116,26 @@ static inline bool init_task_stack_addr(const void *addr)
 			sizeof(init_thread_union.stack));
 }
 
+static DEFINE_SPINLOCK(report_lock);
+
+static void kasan_start_report(unsigned long *flags)
+{
+	/*
+	 * Make sure we don't end up in loop.
+	 */
+	kasan_disable_current();
+	spin_lock_irqsave(&report_lock, *flags);
+	pr_err("==================================================================\n");
+}
+
+static void kasan_end_report(unsigned long *flags)
+{
+	pr_err("==================================================================\n");
+	add_taint(TAINT_BAD_PAGE, LOCKDEP_NOW_UNRELIABLE);
+	spin_unlock_irqrestore(&report_lock, *flags);
+	kasan_enable_current();
+}
+
 #ifdef CONFIG_SLAB
 static void print_track(struct kasan_track *track)
 {
@@ -147,6 +167,28 @@ static void object_err(struct kmem_cache *cache, struct page *page,
 	pr_err("Freed:\n");
 	print_track(&alloc_info->free_track);
 }
+
+void kasan_report_double_free(struct kmem_cache *cache, void *object,
+			struct kasan_track free_stack, s8 shadow)
+{
+	unsigned long flags;
+
+	kasan_start_report(&flags);
+
+	pr_err("BUG: Double free or corrupt pointer\n");
+	pr_err("Unexpected shadow byte: 0x%hhX\n", shadow);
+
+	dump_stack();
+	pr_err("Object at %p, in cache %s\n", object, cache->name);
+	get_alloc_info(cache, object);
+	pr_err("Allocated:\n");
+	print_track(&get_alloc_info(cache, object)->alloc_track);
+	pr_err("Freed:\n");
+	print_track(&free_stack);
+
+	kasan_end_report(&flags);
+}
+
 #endif
 
 static void print_address_description(struct kasan_access_info *info)
@@ -228,19 +270,13 @@ static void print_shadow_for_address(const void *addr)
 	}
 }
 
-static DEFINE_SPINLOCK(report_lock);
-
 static void kasan_report_error(struct kasan_access_info *info)
 {
 	unsigned long flags;
 	const char *bug_type;
 
-	/*
-	 * Make sure we don't end up in loop.
-	 */
-	kasan_disable_current();
-	spin_lock_irqsave(&report_lock, flags);
-	pr_err("==================================================================\n");
+	kasan_start_report(&flags);
+
 	if (info->access_addr <
 			kasan_shadow_to_mem((void *)KASAN_SHADOW_START)) {
 		if ((unsigned long)info->access_addr < PAGE_SIZE)
@@ -261,10 +297,8 @@ static void kasan_report_error(struct kasan_access_info *info)
 		print_address_description(info);
 		print_shadow_for_address(info->first_bad_addr);
 	}
-	pr_err("==================================================================\n");
-	add_taint(TAINT_BAD_PAGE, LOCKDEP_NOW_UNRELIABLE);
-	spin_unlock_irqrestore(&report_lock, flags);
-	kasan_enable_current();
+
+	kasan_end_report(&flags);
 }
 
 void kasan_report(unsigned long addr, size_t size,

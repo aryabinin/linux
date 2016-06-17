@@ -527,34 +527,48 @@ static void kasan_poison_slab_free(struct kmem_cache *cache, void *object)
 bool kasan_slab_free(struct kmem_cache *cache, void *object)
 {
 #ifdef CONFIG_SLAB
-	struct kasan_alloc_meta *alloc_info;
-	struct kasan_free_meta *free_info;
-	s8 shadow;
+	struct kasan_track *free_track;
+	struct kasan_track new_free_stack, old_free_stack;
+	s8 old_shadow;
 
 	/* RCU slabs could be legally used after free within the RCU period */
 	if (unlikely(cache->flags & SLAB_DESTROY_BY_RCU) ||
 		unlikely(!(cache->flags & SLAB_KASAN)))
 		return false;
 
-	alloc_info = get_alloc_info(cache, object);
-	free_info = get_free_info(cache, object);
+	free_track = &get_alloc_info(cache, object)->free_track;
 
-	shadow = READ_ONCE(*(s8 *)kasan_mem_to_shadow(object));
+	set_track(&new_free_stack, GFP_NOWAIT);
+	old_free_stack = xchg_release(free_track, new_free_stack);
+	old_shadow = xchg_release((s8 *)kasan_mem_to_shadow(object),
+				KASAN_KMALLOC_FREE);
 
-	if (shadow < 0 || shadow >= KASAN_SHADOW_SCALE_SIZE) {
-		pr_err("Double free");
-		dump_stack();
+	if (old_shadow < 0 || old_shadow >= KASAN_SHADOW_SCALE_SIZE) {
+		struct kasan_track first_free_stack;
+
+		/* Paired with xchg_release() above */
+		first_free_stack = smp_load_acquire(free_track);
+
+		/*
+		 * We didn't raced with another instance of kasan_slab_free()
+		 * so the previous free stack supposed to be in old_free_stack.
+		 * Otherwise, free_stack will contain stack trace of another
+		 * kfree() call.
+		 */
+		if (first_free_stack.id == new_free_stack.id)
+			first_free_stack = old_free_stack;
+
+		kasan_report_double_free(cache, object, first_free_stack,
+					old_shadow);
 		return true;
 	}
-
-	quarantine_put(free_info, cache);
-	set_track(&alloc_info->free_track, GFP_NOWAIT);
+	quarantine_put(get_free_info(cache, object), cache);
 	kasan_poison_slab_free(cache, object);
 	return true;
-#else
+
+#endif
 	kasan_poison_slab_free(cache, object);
 	return false;
-#endif
 }
 
 void kasan_kmalloc(struct kmem_cache *cache, const void *object, size_t size,
