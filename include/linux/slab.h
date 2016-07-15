@@ -200,9 +200,15 @@ size_t ksize(const void *);
  * to do various tricks to work around compiler limitations in order to
  * ensure proper constant folding.
  */
-#define KMALLOC_SHIFT_HIGH	((MAX_ORDER + PAGE_SHIFT - 1) <= 25 ? \
+#define KMALLOC_SHIFT_MAX	((MAX_ORDER + PAGE_SHIFT - 1) <= 25 ? \
 				(MAX_ORDER + PAGE_SHIFT - 1) : 25)
-#define KMALLOC_SHIFT_MAX	KMALLOC_SHIFT_HIGH
+
+#ifndef CONFIG_KASAN
+#define KMALLOC_SHIFT_HIGH	KMALLOC_SHIFT_MAX
+#else
+#define KMALLOC_SHIFT_HIGH	(KMALLOC_SHIFT_MAX - 1)
+#endif
+
 #ifndef KMALLOC_SHIFT_LOW
 #define KMALLOC_SHIFT_LOW	5
 #endif
