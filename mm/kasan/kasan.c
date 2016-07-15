@@ -372,9 +372,7 @@ void kasan_cache_create(struct kmem_cache *cache, size_t *size,
 			unsigned long *flags)
 {
 	int redzone_adjust;
-#ifdef CONFIG_SLAB
 	int orig_size = *size;
-#endif
 
 	/* Add alloc meta. */
 	cache->kasan_info.alloc_meta_offset = *size;
@@ -392,25 +390,20 @@ void kasan_cache_create(struct kmem_cache *cache, size_t *size,
 	if (redzone_adjust > 0)
 		*size += redzone_adjust;
 
-#ifdef CONFIG_SLAB
-	*size = min(KMALLOC_MAX_SIZE,
-		    max(*size,
-			cache->object_size +
-			optimal_redzone(cache->object_size)));
+	*size = min(KMALLOC_MAX_SIZE, max(*size, cache->object_size +
+					optimal_redzone(cache->object_size)));
+
 	/*
 	 * If the metadata doesn't fit, don't enable KASAN at all.
 	 */
 	if (*size <= cache->kasan_info.alloc_meta_offset ||
 			*size <= cache->kasan_info.free_meta_offset) {
+		cache->kasan_info.alloc_meta_offset = 0;
+		cache->kasan_info.free_meta_offset = 0;
 		*size = orig_size;
 		return;
 	}
-#else
-	*size = max(*size,
-			cache->object_size +
-			optimal_redzone(cache->object_size));
 
-#endif
 	*flags |= SLAB_KASAN;
 }
 
