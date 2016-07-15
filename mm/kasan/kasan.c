@@ -535,7 +535,9 @@ static void kasan_poison_slab_free(struct kmem_cache *cache, void *object)
 
 bool kasan_slab_free(struct kmem_cache *cache, void *object)
 {
-	s8 shadow_byte;
+	struct kasan_track *free_track;
+	struct kasan_track new_free_stack, old_free_stack;
+	s8 old_shadow;
 
 	/* RCU slabs could be legally used after free within the RCU period */
 	if (unlikely(cache->flags & SLAB_DESTROY_BY_RCU))
@@ -546,10 +548,31 @@ bool kasan_slab_free(struct kmem_cache *cache, void *object)
 		return false;
 	}
 
-	shadow_byte = READ_ONCE(*(s8 *)kasan_mem_to_shadow(object));
+	free_track = &get_alloc_info(cache, object)->free_track;
 
-	if (shadow_byte < 0 || shadow_byte >= KASAN_SHADOW_SCALE_SIZE) {
-		kasan_report_double_free(cache, object, shadow_byte);
+	set_track(&new_free_stack, GFP_NOWAIT);
+	old_free_stack = xchg_release(free_track, new_free_stack);
+
+	old_shadow = xchg_release((s8 *)kasan_mem_to_shadow(object),
+				KASAN_KMALLOC_FREE);
+
+	if (old_shadow < 0 || old_shadow >= KASAN_SHADOW_SCALE_SIZE) {
+		struct kasan_track first_free_stack;
+
+		/* Paired with xchg_release() above */
+		first_free_stack = smp_load_acquire(free_track);
+
+		/*
+		 * We didn't raced with another instance of kasan_slab_free()
+		 * so the previous free stack supposed to be in old_free_stack.
+		 * Otherwise, free_stack will contain stack trace of another
+		 * kfree() call.
+		 */
+		if (first_free_stack.id == new_free_stack.id)
+			first_free_stack = old_free_stack;
+
+		kasan_report_double_free(cache, object, first_free_stack,
+					old_shadow);
 		return true;
 	}
 

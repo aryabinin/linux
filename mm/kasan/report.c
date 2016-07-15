@@ -168,7 +168,7 @@ static void kasan_object_err(struct kmem_cache *cache, struct page *page,
 }
 
 void kasan_report_double_free(struct kmem_cache *cache, void *object,
-			s8 shadow)
+			struct kasan_track free_stack, s8 shadow)
 {
 	unsigned long flags;
 
@@ -183,7 +183,7 @@ void kasan_report_double_free(struct kmem_cache *cache, void *object,
 	pr_err("Allocated:\n");
 	print_track(&get_alloc_info(cache, object)->alloc_track);
 	pr_err("Freed:\n");
-	print_track(&get_alloc_info(cache,object)->free_track);
+	print_track(&free_stack);
 
 	kasan_end_report(&flags);
 }
