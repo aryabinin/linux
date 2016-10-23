@@ -29,3 +29,5 @@ else
     endif
 endif
 endif
+
+CFLAGS_KMSAN := -fsanitize=memory -mllvm -msan-instrumentation-with-call-threshold=0 -mllvm -msan-poison-stack=0

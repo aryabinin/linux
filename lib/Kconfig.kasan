@@ -54,3 +54,13 @@ config TEST_KASAN
 	  kernel debugging features like kernel address sanitizer.
 
 endif
+
+config KMSAN
+	bool "KMSAN: "
+	help
+	  KMSAN
+config KMSAN_ALL
+	bool "fuck"
+	depends on KMSAN
+	help
+	  Build all with kmsan

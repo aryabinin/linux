@@ -188,6 +188,9 @@ SECTIONS
 	ASSERT(SIZEOF(.data..percpu) < CONFIG_PHYSICAL_START,
 	       "per-CPU data too large - increase CONFIG_PHYSICAL_START")
 #endif
+	.tdata : AT(ADDR(.tdata) - LOAD_OFFSET) {
+		*(.tdata)
+	}
 
 	INIT_TEXT_SECTION(PAGE_SIZE)
 #ifdef CONFIG_X86_64
