@@ -241,7 +241,7 @@ static inline void free_thread_stack(struct task_struct *tsk)
 		}
 		local_irq_restore(flags);
 
-		vfree_atomic(tsk->stack);
+		vfree(tsk->stack);
 		return;
 	}
 #endif
