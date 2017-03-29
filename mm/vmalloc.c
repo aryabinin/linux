@@ -701,7 +701,7 @@ static bool __purge_vmap_area_lazy(unsigned long start, unsigned long end)
  * Kick off a purge of the outstanding lazy areas. Don't bother if somebody
  * is already purging.
  */
-static void try_purge_vmap_area_lazy(void)
+static void try_purge_vmap_area_lazy(struct work_struct *work)
 {
 	if (mutex_trylock(&vmap_purge_lock)) {
 		__purge_vmap_area_lazy(ULONG_MAX, 0);
@@ -720,6 +720,8 @@ static void purge_vmap_area_lazy(void)
 	mutex_unlock(&vmap_purge_lock);
 }
 
+static DECLARE_WORK(purge_vmap_work, try_purge_vmap_area_lazy);
+
 /*
  * Free a vmap area, caller ensuring that the area has been unmapped
  * and flush_cache_vunmap had been called for the correct range
@@ -736,7 +738,7 @@ static void free_vmap_area_noflush(struct vmap_area *va)
 	llist_add(&va->purge_list, &vmap_purge_list);
 
 	if (unlikely(nr_lazy > lazy_max_pages()))
-		try_purge_vmap_area_lazy();
+		schedule_work(&purge_vmap_work);
 }
 
 /*
@@ -1125,7 +1127,6 @@ void vm_unmap_ram(const void *mem, unsigned int count)
 	unsigned long addr = (unsigned long)mem;
 	struct vmap_area *va;
 
-	might_sleep();
 	BUG_ON(!addr);
 	BUG_ON(addr < VMALLOC_START);
 	BUG_ON(addr > VMALLOC_END);
@@ -1476,8 +1477,6 @@ struct vm_struct *find_vm_area(const void *addr)
 struct vm_struct *remove_vm_area(const void *addr)
 {
 	struct vmap_area *va;
-
-	might_sleep();
 
 	va = find_vmap_area((unsigned long)addr);
 	if (va && va->flags & VM_VM_AREA) {
