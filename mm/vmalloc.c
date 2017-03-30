@@ -737,7 +737,8 @@ static void free_vmap_area_noflush(struct vmap_area *va)
 	/* After this point, we may free va at any time */
 	llist_add(&va->purge_list, &vmap_purge_list);
 
-	if (unlikely(nr_lazy > lazy_max_pages()))
+	if (unlikely(nr_lazy > lazy_max_pages()) &&
+	    !mutex_is_locked(&vmap_purge_lock))
 		schedule_work(&purge_vmap_work);
 }
 
