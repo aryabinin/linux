@@ -6,6 +6,7 @@
 #include <linux/proc_fs.h>
 #include <linux/sched.h>
 #include <linux/sched/cputime.h>
+#include <linux/sched/mm.h>
 
 #include <net/netlink.h>
 
