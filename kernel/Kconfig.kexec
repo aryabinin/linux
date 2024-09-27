@@ -151,4 +151,17 @@ config CRASH_MAX_MEMORY_RANGES
 	  the computation behind the value provided through the
 	  /sys/kernel/crash_elfcorehdr_size attribute.
 
+config ARCH_HAS_KSTATE
+	bool
+
+config KSTATE
+	bool "Migrate internal kernel state across kexec"
+	default n
+	depends on ARCH_HAS_KSTATE
+	depends on KEXEC_FILE
+	help
+	  KSTATE (kernel state) is a mechanism to describe internal kernel
+	  state, save it into the memory and restore the state after kexec
+	  in new kernel.
+
 endmenu
