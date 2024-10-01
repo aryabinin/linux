@@ -309,6 +309,13 @@ int kstate_register(struct kstate_description *state, void *obj)
 	return 0;
 }
 
+int kstate_page_save(struct kstate_stream *stream, void *obj,
+		const struct kstate_field *field)
+{
+	kstate_register_page(*(struct page **)obj, 0);
+	return 0;
+}
+
 static int __init setup_kstate(char *arg)
 {
 	char *end;
@@ -323,7 +330,124 @@ static int __init setup_kstate(char *arg)
 }
 early_param("kstate_stream", setup_kstate);
 
+/*
+ * TODO: probably should use folio instead/in addition,
+ * also will need to think/decide what fields
+ * to preserve or not
+ */
+struct kstate_description page_state = {
+	.name = "struct_page",
+	.id = KSTATE_STRUCT_PAGE_ID,
+	.state_list = LIST_HEAD_INIT(page_state.state_list),
+	.fields = (const struct kstate_field[]) {
+		KSTATE_BASE_TYPE(_mapcount, struct page, atomic_t),
+		KSTATE_BASE_TYPE(_refcount, struct page, atomic_t),
+		KSTATE_END_OF_LIST()
+	},
+};
+
+struct state_entry preserved_se;
+
+struct preserved_pages {
+	unsigned int nr_pages;
+	struct list_head list;
+};
+struct kpage_state {
+	struct list_head list;
+	u8 order;
+	struct page *page;
+};
+
+struct preserved_pages preserved_pages = {
+	.list = LIST_HEAD_INIT(preserved_pages.list)
+};
+
+int kstate_register_page(struct page *page, int order)
+{
+	struct kpage_state *state;
+
+	state = kmalloc(sizeof(*state), GFP_KERNEL);
+	if (!state)
+		return -ENOMEM;
+
+	state->page = page;
+	state->order = order;
+	list_add(&state->list, &preserved_pages.list);
+	preserved_pages.nr_pages++;
+	return 0;
+}
+
+static int kstate_pages_save(struct kstate_stream *stream, void *obj,
+			const struct kstate_field *field)
+{
+	struct kpage_state *p_state;
+	int ret;
+
+	list_for_each_entry(p_state, &preserved_pages.list, list) {
+		unsigned long paddr = page_to_phys(p_state->page);
+
+		ret = kstate_save_data(stream, &p_state->order,
+				sizeof(p_state->order));
+		if (ret)
+			return ret;
+		ret = kstate_save_data(stream, &paddr, sizeof(paddr));
+		if (ret)
+			return ret;
+	}
+	return 0;
+}
+
+bool kstate_range_is_preserved(unsigned long start, unsigned long end)
+{
+	struct kpage_state *p_state;
+
+	list_for_each_entry(p_state, &preserved_pages.list, list) {
+		unsigned long pstart, pend;
+		pstart = page_to_boot_pfn(p_state->page);
+		pend = pstart + (p_state->order << PAGE_SHIFT) - 1;
+		if ((end >= pstart) && (start <= pend))
+			return 1;
+	}
+	return 0;
+}
+
+static int __init kstate_pages_restore(struct kstate_stream *stream, void *obj,
+			const struct kstate_field *field)
+{
+	struct preserved_pages *preserved_pages = obj;
+	int nr_pages, i;
+
+	nr_pages = preserved_pages->nr_pages;
+	for (i = 0; i < nr_pages; i++) {
+		int order = kstate_get_byte(stream);
+		unsigned long phys = kstate_get_ulong(stream);
+
+		memblock_reserve(phys, PAGE_SIZE << order);
+	}
+	return 0;
+}
+
+struct kstate_description kstate_preserved_mem = {
+	.name = "preserved_range",
+	.id = KSTATE_RSVD_MEM_ID,
+	.state_list = LIST_HEAD_INIT(kstate_preserved_mem.state_list),
+	.fields = (const struct kstate_field[]) {
+		KSTATE_BASE_TYPE(nr_pages, struct preserved_pages, unsigned int),
+		{
+			.name = "pages",
+			.flags = KS_CUSTOM,
+			.size = sizeof(struct preserved_pages),
+			.save = kstate_pages_save,
+			.restore = kstate_pages_restore,
+		},
+
+		KSTATE_END_OF_LIST()
+	},
+};
+
 void __init kstate_init(void)
 {
 	memblock_reserve(kstate_stream_addr, kstate_size);
+	__kstate_register(&kstate_preserved_mem, &preserved_pages,
+			&preserved_se);
 }

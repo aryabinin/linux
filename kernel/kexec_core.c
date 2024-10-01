@@ -13,6 +13,7 @@
 #include <linux/slab.h>
 #include <linux/fs.h>
 #include <linux/kexec.h>
+#include <linux/kstate.h>
 #include <linux/mutex.h>
 #include <linux/list.h>
 #include <linux/highmem.h>
@@ -261,7 +262,7 @@ int kimage_is_destination_range(struct kimage *image,
 			return 1;
 	}
 
-	return 0;
+	return kstate_range_is_preserved(start, end);
 }
 
 int kimage_is_control_page(struct kimage *image,

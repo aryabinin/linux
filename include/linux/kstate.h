@@ -88,6 +88,8 @@ struct kstate_field {
 };
 
 enum kstate_ids {
+	KSTATE_RSVD_MEM_ID = 1,
+	KSTATE_STRUCT_PAGE_ID,
 	KSTATE_LAST_ID = -1,
 };
 
@@ -124,6 +126,8 @@ static inline unsigned long kstate_get_ulong(struct kstate_stream *stream)
         return ret;
 }
 
+extern struct kstate_description page_state;
+
 #ifdef CONFIG_KSTATE
 
 void kstate_init(void);
@@ -141,6 +145,12 @@ void restore_kstate(struct kstate_stream *stream, int id,
 		const struct kstate_description *kstate, void *obj);
 int kstate_load_migrate_buf(struct kimage *image);
 
+int kstate_page_save(struct kstate_stream *stream, void *obj,
+		const struct kstate_field *field);
+int kstate_register_page(struct page *page, int order);
+
+bool kstate_range_is_preserved(unsigned long start, unsigned long end);
+
 #else
 
 static inline void kstate_init(void) { }
@@ -150,6 +160,11 @@ static inline int kstate_save_state(void) { return 0; }
 static inline void free_kstate_stream(void) { }
 
 static inline int kstate_load_migrate_buf(struct kimage *image) { return 0; }
+
+static inline bool kstate_range_is_preserved(unsigned long start,
+					unsigned long end)
+{ return 0; }
+
 #endif
 
 
@@ -174,6 +189,21 @@ static inline int kstate_load_migrate_buf(struct kimage *image) { return 0; }
 		.addr_type = (_addr_type),		\
 		.flags = KS_ADDRESS,			\
 		.offset = offsetof(_state, _f),		\
+	}
+
+#define KSTATE_PAGE(_f, _state)				\
+	{						\
+		.name = "page",				\
+		.flags = KS_CUSTOM,			\
+		.offset = offsetof(_state, _f),		\
+		.save = kstate_page_save,		\
+	},						\
+	KSTATE_ADDRESS(_f, _state, KS_VMEMMAP_ADDR),	\
+	{ 						\
+		.name = "struct_page",			\
+		.flags = KS_STRUCT | KS_POINTER,	\
+		.offset = offsetof(_state, _f),		\
+		.ksd = &page_state,			\
 	}
 
 #define KSTATE_END_OF_LIST() {	\
