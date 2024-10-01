@@ -18,6 +18,7 @@
 #include <linux/writeback.h>
 #include <linux/kallsyms.h>
 #include <linux/security.h>
+#include <linux/kstate.h>
 #include <linux/seq_file.h>
 #include <linux/irqflags.h>
 #include <linux/debugfs.h>
@@ -10469,6 +10470,85 @@ __init static void enable_instances(void)
 	}
 }
 
+#ifdef CONFIG_KSTATE
+static int cur_trace_save(struct kstate_stream *stream, void *obj,
+			const struct kstate_field *field)
+{
+	struct trace_array *tr = obj;
+	unsigned long len = strlen(tr->current_trace->name) + 1;
+	return kstate_save_data(stream, (void *)tr->current_trace->name, len);
+}
+
+static int cur_trace_restore(struct kstate_stream *stream, void *obj,
+			const struct kstate_field *field)
+{
+	struct trace_array *tr = obj;
+	unsigned long len = strlen(stream->pos) + 1;
+
+	tracing_set_tracer(tr, stream->pos);
+	stream->pos += len;
+	return 0;
+}
+
+static int tracing_on_save(struct kstate_stream *stream, void *obj,
+			const struct kstate_field *field)
+{
+	struct trace_array *tr = obj;
+	u8 is_on = (u8)tracer_tracing_is_on(tr);
+
+	return kstate_save_data(stream, &is_on, sizeof(is_on));
+}
+
+static int tracing_on_restore(struct kstate_stream *stream, void *obj,
+			const struct kstate_field *field)
+{
+	struct trace_array *tr = obj;
+	u8 on = kstate_get_byte(stream);
+
+	if (on)
+		tracer_tracing_on(tr);
+	else
+		tracer_tracing_off(tr);
+
+	return 0;
+}
+
+extern struct kstate_description kstate_trace_buffer;
+
+struct kstate_description global_trace_state = {
+	.name = "trace_state",
+	.id = KSTATE_TRACE_ID,
+	.version_id = 1,
+	.state_list = LIST_HEAD_INIT(global_trace_state.state_list),
+	.fields = (const struct kstate_field[]) {
+		{
+			.name = "tracing_on",
+			.flags = KS_CUSTOM,
+			.version_id = 0,
+			.size = sizeof(struct trace_array),
+			.save = tracing_on_save,
+			.restore = tracing_on_restore,
+		},
+		{
+			.name = "current_trace",
+			.flags = KS_CUSTOM,
+			.version_id = 0,
+			.size = sizeof(struct trace_array),
+			.save = cur_trace_save,
+			.restore = cur_trace_restore,
+
+		},
+		{
+			.name = "trace_buffer",
+			.flags = KS_STRUCT|KS_POINTER,
+			.offset = offsetof(struct trace_array, array_buffer.buffer),
+			.ksd = &kstate_trace_buffer,
+		},
+		KSTATE_END_OF_LIST()
+	},
+};
+#endif
+
 __init static int tracer_alloc_buffers(void)
 {
 	int ring_buf_size;
@@ -10706,6 +10786,8 @@ __init static int late_trace_init(void)
 
 	tracing_set_default_clock();
 	clear_boot_tracer();
+	kstate_register(&global_trace_state, &global_trace);
+
 	return 0;
 }
 

@@ -16,6 +16,7 @@
 #include <linux/security.h>
 #include <linux/uaccess.h>
 #include <linux/hardirq.h>
+#include <linux/kstate.h>
 #include <linux/kthread.h>	/* for self test */
 #include <linux/module.h>
 #include <linux/percpu.h>
@@ -1468,6 +1469,215 @@ static void rb_tail_page_update(struct ring_buffer_per_cpu *cpu_buffer,
 			local_inc(&cpu_buffer->pages_touched);
 	}
 }
+
+#ifdef CONFIG_KSTATE
+static int kstate_bpage_save(struct kstate_stream *stream, void *obj,
+			const struct kstate_field *field)
+{
+	struct buffer_page *bpage = obj;
+
+	kstate_register_page(virt_to_page(bpage->page), bpage->order);
+	return 0;
+
+}
+struct kstate_description kstate_buffer_page = {
+	.name = "buffer_page",
+	.id = KSTATE_TRACE_BUFFER_PAGE_ID,
+	.fields = (const struct kstate_field[]) {
+		KSTATE_BASE_TYPE(write, struct buffer_page, local_t),
+		KSTATE_BASE_TYPE(read, struct buffer_page, unsigned),
+		KSTATE_BASE_TYPE(entries, struct buffer_page, local_t),
+		KSTATE_BASE_TYPE(real_end, struct buffer_page, unsigned long),
+		KSTATE_BASE_TYPE(order, struct buffer_page, unsigned),
+		KSTATE_BASE_TYPE(page, struct buffer_page,
+				struct buffer_data_page *),
+		{
+			.name = "buffer_page",
+			.flags = KS_CUSTOM,
+			.save = kstate_bpage_save,
+			.size = (sizeof(struct buffer_page)),
+		},
+		KSTATE_END_OF_LIST(),
+	},
+};
+
+static void restore_pages_positions(struct kstate_stream *stream,
+				struct ring_buffer_per_cpu *cpu_buffer)
+{
+	struct list_head *tmp;
+	struct list_head *head = rb_list_head(cpu_buffer->pages);
+	unsigned long commit_page_nr, reader_page_nr,
+		head_page_nr, tail_page_nr;
+	int i = 0;
+
+	commit_page_nr = kstate_get_ulong(stream);
+	reader_page_nr = kstate_get_ulong(stream);
+	head_page_nr = kstate_get_ulong(stream);
+	tail_page_nr = kstate_get_ulong(stream);
+
+	for (tmp = head;;) {
+		struct buffer_page *page = (struct buffer_page *)tmp;
+
+		if (commit_page_nr == i)
+			cpu_buffer->commit_page = page;
+		if (reader_page_nr == i)
+			cpu_buffer->reader_page = page;
+		if (head_page_nr == i)
+			cpu_buffer->head_page = page;
+		if (tail_page_nr == i)
+			cpu_buffer->tail_page = page;
+		i++;
+		tmp = rb_list_head(tmp->next);
+		if (tmp == head)
+			break;
+	}
+}
+
+static int kstate_rb_restore(struct kstate_stream *stream, void *obj,
+			const struct kstate_field *field)
+{
+	struct ring_buffer_per_cpu *cpu_buffer = obj;
+	LIST_HEAD(pages);
+	struct buffer_page *page;
+	struct list_head *tmp;
+	struct list_head *head = rb_list_head(cpu_buffer->pages);
+	int i = 0;
+
+	while (kstate_get_byte(stream)) {
+		int j = 0;
+		bool page_exists  = false;
+
+		for (tmp = rb_list_head(head->next); tmp != head;
+		     tmp = rb_list_head(tmp->next)) {
+			if (j == i) {
+				page_exists = true;
+				page = (struct buffer_page *)tmp;
+				break;
+			}
+			j++;
+		}
+		if (!page_exists) {
+			struct buffer_page *bpage;
+
+			bpage = kzalloc_node(ALIGN(sizeof(*bpage),
+					cache_line_size()), GFP_KERNEL,
+					cpu_to_node(cpu_buffer->cpu));
+			list_add(&bpage->list, &pages);
+			page = bpage;
+		}
+		restore_kstate(stream, i++, field->ksd, page);
+	}
+
+	restore_pages_positions(stream, cpu_buffer);
+
+	return 0;
+}
+
+static int kstate_rb_save(struct kstate_stream *stream, void *obj,
+			const struct kstate_field *field)
+{
+	struct ring_buffer_per_cpu *cpu_buffer = obj;
+	struct list_head *tmp;
+	struct list_head *head = rb_list_head(cpu_buffer->pages);
+	unsigned long commit_page_nr, reader_page_nr,
+		head_page_nr, tail_page_nr;
+	int i = 0;
+	u8 zero = 0;
+	int ret;
+
+
+	for (tmp = head;;) {
+		struct buffer_page *page = (struct buffer_page *)tmp;
+		u8 one = 1;
+
+		ret = kstate_save_data(stream, &one, sizeof(one));
+		if (ret)
+			return ret;
+
+		ret = save_kstate(stream, i, field->ksd, page);
+		if (ret)
+			return ret;
+
+		if (cpu_buffer->commit_page == page)
+			commit_page_nr = i;
+		if (cpu_buffer->reader_page == page)
+			reader_page_nr = i;
+		if (cpu_buffer->head_page == page)
+			head_page_nr = i;
+		if (cpu_buffer->tail_page == page)
+			tail_page_nr = i;
+		i++;
+		tmp = rb_list_head(tmp->next);
+		if (tmp == head)
+			break;
+	}
+
+	ret = kstate_save_data(stream, &zero, sizeof(zero));
+	if (ret)
+		return ret;
+
+	/* save pages positions */
+	ret = kstate_save_data(stream, &commit_page_nr, sizeof(commit_page_nr));
+	if (ret)
+		return ret;
+
+	ret = kstate_save_data(stream, &reader_page_nr, sizeof(reader_page_nr));
+	if (ret)
+		return ret;
+
+	ret = kstate_save_data(stream, &head_page_nr, sizeof(head_page_nr));
+	if (ret)
+		return ret;
+
+	ret = kstate_save_data(stream, &tail_page_nr, sizeof(tail_page_nr));
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+struct kstate_description kstate_ring_buffer_per_cpu = {
+	.name = "ring_buffer_per_cpu",
+	.id = KSTATE_TRACE_RING_BUFFER_ID,
+	.state_list = LIST_HEAD_INIT(kstate_ring_buffer_per_cpu.state_list),
+	.fields = (const struct kstate_field[]) {
+		KSTATE_BASE_TYPE(entries, struct ring_buffer_per_cpu, local_t),
+		KSTATE_BASE_TYPE(entries_bytes, struct ring_buffer_per_cpu,
+			local_t),
+		{
+			.name = "buffer_pages",
+			.flags = KS_CUSTOM,
+			.size = (sizeof(struct ring_buffer_per_cpu)),
+			.ksd = &kstate_buffer_page,
+			.save = kstate_rb_save,
+			.restore = kstate_rb_restore,
+		},
+		KSTATE_END_OF_LIST(),
+	},
+};
+
+static int nr_ring_buffers(void)
+{
+	return nr_cpu_ids;
+}
+
+struct kstate_description kstate_trace_buffer = {
+	.name = "trace_buffer",
+	.id = KSTATE_TRACE_BUFFER_ID,
+	.state_list = LIST_HEAD_INIT(kstate_trace_buffer.state_list),
+	.fields = (const struct kstate_field[]) {
+		{
+			.name = "ring_buffers",
+			.flags = KS_STRUCT|KS_POINTER|KS_ARRAY_OF_POINTER,
+			.size = (sizeof(struct ring_buffer_per_cpu *)),
+			.offset = offsetof(struct trace_buffer, buffers),
+			.count = nr_ring_buffers,
+			.ksd = &kstate_ring_buffer_per_cpu,
+		},
+		KSTATE_END_OF_LIST(),
+	}
+};
+#endif
 
 static void rb_check_bpage(struct ring_buffer_per_cpu *cpu_buffer,
 			  struct buffer_page *bpage)
