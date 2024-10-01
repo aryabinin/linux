@@ -287,6 +287,11 @@ static void restore_migrate_state(unsigned long kstate_data,
 static unsigned long kstate_stream_addr = -1;
 static unsigned long kstate_size;
 
+bool is_kstate_kernel(void)
+{
+	return kstate_stream_addr != -1;
+}
+
 static void __kstate_register(struct kstate_description *state, void *obj,
 			struct state_entry *se)
 {

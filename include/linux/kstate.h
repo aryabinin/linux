@@ -90,6 +90,7 @@ struct kstate_field {
 enum kstate_ids {
 	KSTATE_RSVD_MEM_ID = 1,
 	KSTATE_STRUCT_PAGE_ID,
+	KSTATE_TEST_ID,
 	KSTATE_LAST_ID = -1,
 };
 
@@ -131,6 +132,8 @@ extern struct kstate_description page_state;
 #ifdef CONFIG_KSTATE
 
 void kstate_init(void);
+
+bool is_kstate_kernel(void);
 
 int kstate_save_state(void);
 void free_kstate_stream(void);
