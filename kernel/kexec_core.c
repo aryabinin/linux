@@ -264,6 +264,24 @@ int kimage_is_destination_range(struct kimage *image,
 	return 0;
 }
 
+int kimage_is_control_page(struct kimage *image,
+			unsigned long start,
+			unsigned long end)
+{
+
+	struct page *page;
+
+	list_for_each_entry(page, &image->control_pages, lru) {
+		unsigned long pstart, pend;
+		pstart = page_to_boot_pfn(page) << PAGE_SHIFT;
+		pend = pstart + PAGE_SIZE * (1 << page_private(page)) - 1;
+		if ((end >= pstart) && (start <= pend))
+			return 1;
+	}
+
+	return 0;
+}
+
 static struct page *kimage_alloc_pages(gfp_t gfp_mask, unsigned int order)
 {
 	struct page *pages;
