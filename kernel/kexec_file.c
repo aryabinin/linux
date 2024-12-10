@@ -464,7 +464,8 @@ static int locate_mem_hole_top_down(unsigned long start, unsigned long end,
 		 * Make sure this does not conflict with any of existing
 		 * segments
 		 */
-		if (kimage_is_destination_range(image, temp_start, temp_end)) {
+		if (kimage_is_destination_range(image, temp_start, temp_end) ||
+			kimage_is_control_page(image, temp_start, temp_end)) {
 			temp_start = temp_start - PAGE_SIZE;
 			continue;
 		}
@@ -498,7 +499,8 @@ static int locate_mem_hole_bottom_up(unsigned long start, unsigned long end,
 		 * Make sure this does not conflict with any of existing
 		 * segments
 		 */
-		if (kimage_is_destination_range(image, temp_start, temp_end)) {
+		if (kimage_is_destination_range(image, temp_start, temp_end) ||
+			kimage_is_control_page(image, temp_start, temp_end)) {
 			temp_start = temp_start + PAGE_SIZE;
 			continue;
 		}
@@ -670,18 +672,6 @@ int kexec_add_buffer(struct kexec_buf *kbuf)
 
 	if (kbuf->image->nr_segments >= KEXEC_SEGMENT_MAX)
 		return -EINVAL;
-
-	/*
-	 * Make sure we are not trying to add buffer after allocating
-	 * control pages. All segments need to be placed first before
-	 * any control pages are allocated. As control page allocation
-	 * logic goes through list of segments to make sure there are
-	 * no destination overlaps.
-	 */
-	if (!list_empty(&kbuf->image->control_pages)) {
-		WARN_ON(1);
-		return -EINVAL;
-	}
 
 	/* Ensure minimum alignment needed for segments. */
 	kbuf->memsz = ALIGN(kbuf->memsz, PAGE_SIZE);

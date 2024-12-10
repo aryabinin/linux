@@ -14,6 +14,9 @@ int kimage_load_segment(struct kimage *image, struct kexec_segment *segment);
 void kimage_terminate(struct kimage *image);
 int kimage_is_destination_range(struct kimage *image,
 				unsigned long start, unsigned long end);
+int kimage_is_control_page(struct kimage *image,
+			unsigned long start,
+			unsigned long end);
 
 /*
  * Whatever is used to serialize accesses to the kexec_crash_image needs to be
