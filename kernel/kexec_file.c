@@ -187,6 +187,34 @@ kimage_validate_signature(struct kimage *image)
 }
 #endif
 
+static int kimage_add_buffers(struct kimage *image)
+{
+	void *ldata;
+	int ret = 0;
+
+	/* IMA needs to pass the measurement list to the next kernel. */
+	ima_add_kexec_buffer(image);
+
+	ret = kstate_load_migrate_buf(image);
+	if (ret)
+		goto out;
+
+	/* Call image load handler */
+	ldata = kexec_image_load_default(image);
+
+	if (IS_ERR(ldata)) {
+		ret = PTR_ERR(ldata);
+		goto out;
+	}
+
+	image->image_loader_data = ldata;
+out:
+	/* In case of error, free up all allocated memory in this function */
+	if (ret)
+		kimage_file_post_load_cleanup(image);
+	return ret;
+
+}
 /*
  * In file mode list of segments is prepared by kernel. Copy relevant
  * data from user space, do error checking, prepare segment list
@@ -197,7 +225,6 @@ kimage_file_prepare_segments(struct kimage *image, int kernel_fd, int initrd_fd,
 			     unsigned long cmdline_len, unsigned flags)
 {
 	ssize_t ret;
-	void *ldata;
 
 	ret = kernel_read_file_from_fd(kernel_fd, 0, &image->kernel_buf,
 				       KEXEC_FILE_SIZE_MAX, NULL,
@@ -251,22 +278,6 @@ kimage_file_prepare_segments(struct kimage *image, int kernel_fd, int initrd_fd,
 				  image->cmdline_buf_len - 1);
 	}
 
-	/* IMA needs to pass the measurement list to the next kernel. */
-	ima_add_kexec_buffer(image);
-
-	ret = kstate_load_migrate_buf(image);
-	if (ret)
-		goto out;
-
-	/* Call image load handler */
-	ldata = kexec_image_load_default(image);
-
-	if (IS_ERR(ldata)) {
-		ret = PTR_ERR(ldata);
-		goto out;
-	}
-
-	image->image_loader_data = ldata;
 out:
 	/* In case of error, free up all allocated memory in this function */
 	if (ret)
@@ -303,10 +314,6 @@ kimage_file_alloc_init(struct kimage **rimage, int kernel_fd,
 	if (ret)
 		goto out_free_image;
 
-	ret = sanity_check_segment_list(image);
-	if (ret)
-		goto out_free_post_load_bufs;
-
 	ret = -ENOMEM;
 	image->control_code_page = kimage_alloc_control_pages(image,
 					   get_order(KEXEC_CONTROL_PAGE_SIZE));
@@ -334,6 +341,70 @@ out_free_image:
 	return ret;
 }
 
+static int kimage_post_load(struct kimage *image)
+{
+	int ret, i;
+
+	ret = kexec_calculate_store_digests(image);
+	if (ret)
+		goto out;
+
+	kexec_dprintk("nr_segments = %lu\n", image->nr_segments);
+	for (i = 0; i < image->nr_segments; i++) {
+		struct kexec_segment *ksegment;
+
+		ksegment = &image->segment[i];
+		kexec_dprintk("segment[%d]: buf=0x%p bufsz=0x%zx mem=0x%lx memsz=0x%zx\n",
+			      i, ksegment->buf, ksegment->bufsz, ksegment->mem,
+			      ksegment->memsz);
+
+		ret = kimage_load_segment(image, &image->segment[i]);
+		if (ret)
+			goto out;
+	}
+
+	kimage_terminate(image);
+
+	ret = machine_kexec_post_load(image);
+	if (ret)
+		goto out;
+
+	kexec_dprintk("kexec_file_load: type:%u, start:0x%lx head:0x%lx\n",
+		image->type, image->start, image->head);
+out:
+	return ret;
+}
+
+int kexec_file_load_segments(struct kimage *image)
+{
+	int ret;
+
+	ret = kimage_add_buffers(image);
+	if (ret) {
+		pr_err("failed to add kimage buffers %d\n", ret);
+		goto out;
+	}
+
+	ret = sanity_check_segment_list(image);
+	if (ret) {
+		pr_err("sanity check failed %d\n", ret);
+		goto out;
+	}
+
+	ret = kimage_post_load(image);
+	if (ret)
+		pr_err("kimage post load failed %d\n", ret);
+
+out:
+	/*
+	 * Free up any temporary buffers allocated which are not needed
+	 * after image has been loaded
+	 */
+	kimage_file_post_load_cleanup(image);
+
+	return ret;
+}
+
 SYSCALL_DEFINE5(kexec_file_load, int, kernel_fd, int, initrd_fd,
 		unsigned long, cmdline_len, const char __user *, cmdline_ptr,
 		unsigned long, flags)
@@ -341,7 +412,7 @@ SYSCALL_DEFINE5(kexec_file_load, int, kernel_fd, int, initrd_fd,
 	int image_type = (flags & KEXEC_FILE_ON_CRASH) ?
 			 KEXEC_TYPE_CRASH : KEXEC_TYPE_DEFAULT;
 	struct kimage **dest_image, *image;
-	int ret = 0, i;
+	int ret = 0;
 
 	/* We only trust the superuser with rebooting the system. */
 	if (!kexec_load_permitted(image_type))
@@ -398,37 +469,12 @@ SYSCALL_DEFINE5(kexec_file_load, int, kernel_fd, int, initrd_fd,
 	if (ret)
 		goto out;
 
-	ret = kexec_calculate_store_digests(image);
-	if (ret)
-		goto out;
-
-	kexec_dprintk("nr_segments = %lu\n", image->nr_segments);
-	for (i = 0; i < image->nr_segments; i++) {
-		struct kexec_segment *ksegment;
-
-		ksegment = &image->segment[i];
-		kexec_dprintk("segment[%d]: buf=0x%p bufsz=0x%zx mem=0x%lx memsz=0x%zx\n",
-			      i, ksegment->buf, ksegment->bufsz, ksegment->mem,
-			      ksegment->memsz);
-
-		ret = kimage_load_segment(image, &image->segment[i]);
+	if (!kexec_late_load(image)) {
+		ret = kexec_file_load_segments(image);
 		if (ret)
 			goto out;
 	}
 
-	kimage_terminate(image);
-
-	ret = machine_kexec_post_load(image);
-	if (ret)
-		goto out;
-
-	kexec_dprintk("kexec_file_load: type:%u, start:0x%lx head:0x%lx flags:0x%lx\n",
-		      image->type, image->start, image->head, flags);
-	/*
-	 * Free up any temporary buffers allocated which are not needed
-	 * after image has been loaded
-	 */
-	kimage_file_post_load_cleanup(image);
 exchange:
 	image = xchg(dest_image, image);
 out:

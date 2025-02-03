@@ -39,7 +39,14 @@ static inline void kexec_unlock(void)
 void kimage_file_post_load_cleanup(struct kimage *image);
 extern char kexec_purgatory[];
 extern size_t kexec_purgatory_size;
+
+static inline bool kexec_late_load(struct kimage *image)
+{
+	return IS_ENABLED(CONFIG_KSTATE) && image->file_mode &&
+		(image->type == KEXEC_TYPE_DEFAULT);
+}
 #else /* CONFIG_KEXEC_FILE */
 static inline void kimage_file_post_load_cleanup(struct kimage *image) { }
+static inline bool kexec_late_load(struct kimage *image) { return false; }
 #endif /* CONFIG_KEXEC_FILE */
 #endif /* LINUX_KEXEC_INTERNAL_H */

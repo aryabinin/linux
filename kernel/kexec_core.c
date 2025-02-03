@@ -1017,6 +1017,12 @@ int kernel_kexec(void)
 		goto Unlock;
 	}
 
+	if (kexec_late_load(kexec_image)) {
+		error = kexec_file_load_segments(kexec_image);
+		if (error)
+			goto Unlock;
+	}
+
 #ifdef CONFIG_KEXEC_JUMP
 	if (kexec_image->preserve_context) {
 		/*
