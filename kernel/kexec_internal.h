@@ -34,6 +34,12 @@ static inline void kexec_unlock(void)
 	atomic_set_release(&__kexec_lock, 0);
 }
 
+static inline bool kexec_late_load(struct kimage *image)
+{
+	return IS_ENABLED(CONFIG_KSTATE) && image->file_mode &&
+		(image->type == KEXEC_TYPE_DEFAULT);
+}
+
 #ifdef CONFIG_KEXEC_FILE
 #include <linux/purgatory.h>
 void kimage_file_post_load_cleanup(struct kimage *image);
