@@ -15,6 +15,7 @@
 #include <linux/slab.h>
 #include <linux/kexec.h>
 #include <linux/kernel.h>
+#include <linux/kstate.h>
 #include <linux/mm.h>
 #include <linux/efi.h>
 #include <linux/random.h>
@@ -77,6 +78,9 @@ static int setup_cmdline(struct kimage *image, struct boot_params *params,
 		len = sprintf(cmdline_ptr,
 			"elfcorehdr=0x%lx ", image->elf_load_addr);
 	}
+	if (IS_ENABLED(CONFIG_KSTATE))
+		len = sprintf(cmdline_ptr, "kstate_stream=0x0%lx@%ld ",
+			image->kstate_stream_addr, image->kstate_size);
 	memcpy(cmdline_ptr + len, cmdline, cmdline_len);
 	cmdline_len += len;
 

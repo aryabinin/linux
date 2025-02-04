@@ -14,6 +14,7 @@
 #include <linux/file.h>
 #include <linux/slab.h>
 #include <linux/kexec.h>
+#include <linux/kstate.h>
 #include <linux/memblock.h>
 #include <linux/mutex.h>
 #include <linux/list.h>
@@ -252,6 +253,10 @@ kimage_file_prepare_segments(struct kimage *image, int kernel_fd, int initrd_fd,
 
 	/* IMA needs to pass the measurement list to the next kernel. */
 	ima_add_kexec_buffer(image);
+
+	ret = kstate_load_migrate_buf(image);
+	if (ret)
+		goto out;
 
 	/* Call image load handler */
 	ldata = kexec_image_load_default(image);
