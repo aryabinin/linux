@@ -299,6 +299,8 @@ struct kimage {
 	unsigned long start;
 	struct page *control_code_page;
 	struct page *swap_page;
+	unsigned long kstate_stream_addr;
+	size_t kstate_size;
 	void *vmcoreinfo_data_copy; /* locates in the crash memory */
 
 	unsigned long nr_segments;

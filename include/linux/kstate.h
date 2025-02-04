@@ -126,6 +126,8 @@ static inline unsigned long kstate_get_ulong(struct kstate_stream *stream)
 
 #ifdef CONFIG_KSTATE
 
+void kstate_init(void);
+
 int kstate_save_state(void);
 void free_kstate_stream(void);
 
@@ -137,14 +139,17 @@ int save_kstate(struct kstate_stream *stream, int id,
 		void *obj);
 void restore_kstate(struct kstate_stream *stream, int id,
 		const struct kstate_description *kstate, void *obj);
+int kstate_load_migrate_buf(struct kimage *image);
 
 #else
 
+static inline void kstate_init(void) { }
 #define kstate_register(state, obj)
 
 static inline int kstate_save_state(void) { return 0; }
 static inline void free_kstate_stream(void) { }
 
+static inline int kstate_load_migrate_buf(struct kimage *image) { return 0; }
 #endif
 
 

@@ -2,6 +2,7 @@
 #include <linux/ctype.h>
 #include <linux/kexec.h>
 #include <linux/kstate.h>
+#include <linux/memblock.h>
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/vmalloc.h>
@@ -182,6 +183,31 @@ int kstate_save_state(void)
 	return 0;
 }
 
+int kstate_load_migrate_buf(struct kimage *image)
+{
+	int ret;
+	struct kexec_buf kbuf = { .image = image, .buf_min = 0,
+		.buf_max = ULONG_MAX, .top_down = true };
+
+	kbuf.bufsz = kstate_stream.size;
+	kbuf.buffer = kstate_stream.start;
+
+	kbuf.memsz = kstate_stream.size;
+
+	kbuf.buf_align = PAGE_SIZE;
+	kbuf.mem = KEXEC_BUF_MEM_UNKNOWN;
+	ret = kexec_add_buffer(&kbuf);
+	if (ret)
+		return ret;
+	image->kstate_stream_addr = kbuf.mem;
+	image->kstate_size = kstate_stream.size;
+
+	pr_info("kstate: Loaded mig_stream at 0x%lx bufsz=0x%lx memsz=0x%lx\n",
+		kbuf.mem, kbuf.bufsz, kbuf.memsz);
+
+	return ret;
+}
+
 void restore_kstate(struct kstate_stream *stream, int id,
 		const struct kstate_description *kstate, void *obj)
 {
@@ -258,6 +284,9 @@ static void restore_migrate_state(unsigned long kstate_data,
 	}
 }
 
+static unsigned long kstate_stream_addr = -1;
+static unsigned long kstate_size;
+
 static void __kstate_register(struct kstate_description *state, void *obj,
 			struct state_entry *se)
 {
@@ -265,7 +294,7 @@ static void __kstate_register(struct kstate_description *state, void *obj,
 	se->id = atomic_inc_return(&state->instance_id);
 	se->obj = obj;
 	list_add(&se->list, &states);
-	restore_migrate_state(0 /*migrate_stream_addr*/, se);
+	restore_migrate_state(kstate_stream_addr, se);
 }
 
 int kstate_register(struct kstate_description *state, void *obj)
@@ -280,3 +309,21 @@ int kstate_register(struct kstate_description *state, void *obj)
 	return 0;
 }
 
+static int __init setup_kstate(char *arg)
+{
+	char *end;
+
+	if (!arg)
+		return -EINVAL;
+	kstate_stream_addr = memparse(arg, &end);
+	if (*end == '@')
+		kstate_size = memparse(end + 1, &end);
+
+	return end > arg ? 0 : -EINVAL;
+}
+early_param("kstate_stream", setup_kstate);
+
+void __init kstate_init(void)
+{
+	memblock_reserve(kstate_stream_addr, kstate_size);
+}
