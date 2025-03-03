@@ -1017,11 +1017,14 @@ int kernel_kexec(void)
 		error = -EINVAL;
 		goto Unlock;
 	}
+	error = kstate_save_state();
+	if (error)
+		goto Unlock;
 
 	if (kexec_late_load(kexec_image)) {
 		error = kexec_file_load_segments(kexec_image);
 		if (error)
-			goto Unlock;
+			goto Free_kstate;
 	}
 
 #ifdef CONFIG_KEXEC_JUMP
@@ -1104,6 +1107,8 @@ int kernel_kexec(void)
 	}
 #endif
 
+ Free_kstate:
+	free_kstate_stream();
  Unlock:
 	kexec_unlock();
 	return error;
