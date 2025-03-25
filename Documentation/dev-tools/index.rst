@@ -26,6 +26,7 @@ Documentation/process/debugging/index.rst
    gcov
    kasan
    kmsan
+   kstate
    ubsan
    kmemleak
    kcsan
