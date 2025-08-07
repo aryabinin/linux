@@ -151,8 +151,6 @@ static int __kho_preserve_order(struct kho_mem_track *track, unsigned long pfn,
 
 	physxa = xa_load(&track->orders, order);
 	if (!physxa) {
-		int err;
-
 		new_physxa = kzalloc(sizeof(*physxa), GFP_KERNEL);
 		if (!new_physxa)
 			return -ENOMEM;
@@ -160,14 +158,17 @@ static int __kho_preserve_order(struct kho_mem_track *track, unsigned long pfn,
 		xa_init(&new_physxa->phys_bits);
 		physxa = xa_cmpxchg(&track->orders, order, NULL, new_physxa,
 				    GFP_KERNEL);
+		if (xa_is_err(physxa)) {
+			int err = xa_err(physxa);
 
-		err = xa_err(physxa);
-		if (err || physxa) {
 			xa_destroy(&new_physxa->phys_bits);
 			kfree(new_physxa);
 
-			if (err)
-				return err;
+			return err;
+		}
+		if (physxa) {
+			xa_destroy(&new_physxa->phys_bits);
+			kfree(new_physxa);
 		} else {
 			physxa = new_physxa;
 		}
