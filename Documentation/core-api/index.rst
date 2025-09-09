@@ -136,6 +136,7 @@ Documents that don't fit elsewhere or which have yet to be categorized.
 .. toctree::
    :maxdepth: 1
 
+   kstate
    librs
    liveupdate
    netlink

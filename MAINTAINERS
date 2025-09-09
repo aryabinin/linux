@@ -13721,6 +13721,7 @@ F:	include/linux/ks0108.h
 KSTATE
 M:	Andrey Ryabinin <ryabinin.a.a@gmail.com>
 S:	Maintained
+F:	Documentation/core-api/kstate.rst
 F:	include/linux/kstate.h
 F:	kernel/livupdate/kstate.c
 F:	lib/test_kstate.c
