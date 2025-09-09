@@ -1111,18 +1111,11 @@ out:
 	return err;
 }
 
-void __init kho_populate(phys_addr_t fdt_phys, u64 fdt_len,
-			 phys_addr_t scratch_phys, u64 scratch_len)
+static int __init kho_scratch_init(phys_addr_t scratch_phys, u64 scratch_len)
 {
-
-	struct kho_scratch *scratch = NULL;
 	int err = 0;
+	struct kho_scratch *scratch = NULL;
 	unsigned int scratch_cnt = scratch_len / sizeof(*kho_scratch);
-
-
-	err = kho_fdt_init(fdt_phys, fdt_len);
-	if (err)
-		goto out;
 
 	scratch = early_memremap(scratch_phys, scratch_len);
 	if (!scratch) {
@@ -1161,6 +1154,27 @@ void __init kho_populate(phys_addr_t fdt_phys, u64 fdt_len,
 	 * memory reservations from the previous kernel.
 	 */
 	memblock_set_kho_scratch_only();
+out:
+	if (scratch)
+		early_memunmap(scratch, scratch_len);
+
+	return err;
+}
+
+void __init kho_populate(phys_addr_t fdt_phys, u64 fdt_len,
+			 phys_addr_t scratch_phys, u64 scratch_len)
+{
+
+	int err = 0;
+	unsigned int scratch_cnt = scratch_len / sizeof(*kho_scratch);
+
+	err = kho_fdt_init(fdt_phys, fdt_len);
+	if (err)
+		goto out;
+
+	err = kho_scratch_init(scratch_phys, scratch_len);
+	if (err)
+		goto out;
 
 	kho_in.fdt_phys = fdt_phys;
 	kho_in.scratch_phys = scratch_phys;
@@ -1168,8 +1182,6 @@ void __init kho_populate(phys_addr_t fdt_phys, u64 fdt_len,
 	pr_info("found kexec handover data. Will skip init for some devices\n");
 
 out:
-	if (scratch)
-		early_memunmap(scratch, scratch_len);
 	if (err)
 		pr_warn("disabling KHO revival: %d\n", err);
 }
