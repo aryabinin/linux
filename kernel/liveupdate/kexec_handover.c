@@ -1077,13 +1077,10 @@ void __init kho_memory_init(void)
 	}
 }
 
-void __init kho_populate(phys_addr_t fdt_phys, u64 fdt_len,
-			 phys_addr_t scratch_phys, u64 scratch_len)
+static int __init kho_fdt_init(phys_addr_t fdt_phys, u64 fdt_len)
 {
 	void *fdt = NULL;
-	struct kho_scratch *scratch = NULL;
 	int err = 0;
-	unsigned int scratch_cnt = scratch_len / sizeof(*kho_scratch);
 
 	/* Validate the input FDT */
 	fdt = early_memremap(fdt_phys, fdt_len);
@@ -1106,6 +1103,26 @@ void __init kho_populate(phys_addr_t fdt_phys, u64 fdt_len,
 		err = -EINVAL;
 		goto out;
 	}
+
+out:
+	if (fdt)
+		early_memunmap(fdt, fdt_len);
+
+	return err;
+}
+
+void __init kho_populate(phys_addr_t fdt_phys, u64 fdt_len,
+			 phys_addr_t scratch_phys, u64 scratch_len)
+{
+
+	struct kho_scratch *scratch = NULL;
+	int err = 0;
+	unsigned int scratch_cnt = scratch_len / sizeof(*kho_scratch);
+
+
+	err = kho_fdt_init(fdt_phys, fdt_len);
+	if (err)
+		goto out;
 
 	scratch = early_memremap(scratch_phys, scratch_len);
 	if (!scratch) {
@@ -1151,8 +1168,6 @@ void __init kho_populate(phys_addr_t fdt_phys, u64 fdt_len,
 	pr_info("found kexec handover data. Will skip init for some devices\n");
 
 out:
-	if (fdt)
-		early_memunmap(fdt, fdt_len);
 	if (scratch)
 		early_memunmap(scratch, scratch_len);
 	if (err)
