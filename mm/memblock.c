@@ -14,11 +14,13 @@
 #include <linux/pfn.h>
 #include <linux/debugfs.h>
 #include <linux/kmemleak.h>
+#include <linux/kstate.h>
 #include <linux/seq_file.h>
 #include <linux/memblock.h>
 #include <linux/mutex.h>
 
 #ifdef CONFIG_KEXEC_HANDOVER
+#include <linux/crc32.h>
 #include <linux/libfdt.h>
 #include <linux/kexec_handover.h>
 #endif /* CONFIG_KEXEC_HANDOVER */
@@ -2498,140 +2500,76 @@ int reserve_mem_release_by_name(const char *name)
 }
 
 #ifdef CONFIG_KEXEC_HANDOVER
-#define MEMBLOCK_KHO_FDT "memblock"
-#define MEMBLOCK_KHO_NODE_COMPATIBLE "memblock-v1"
-#define RESERVE_MEM_KHO_NODE_COMPATIBLE "reserve-mem-v1"
-
-static int __init prepare_kho_fdt(void)
+static int kstate_preserve_phys(struct kstate_stream *stream, void *obj,
+				const struct kstate_field *field)
 {
-	int err = 0, i;
-	struct page *fdt_page;
-	void *fdt;
+	struct reserve_mem_table *map = obj;
 
-	fdt_page = alloc_page(GFP_KERNEL);
-	if (!fdt_page)
-		return -ENOMEM;
-
-	fdt = page_to_virt(fdt_page);
-
-	err |= fdt_create(fdt, PAGE_SIZE);
-	err |= fdt_finish_reservemap(fdt);
-
-	err |= fdt_begin_node(fdt, "");
-	err |= fdt_property_string(fdt, "compatible", MEMBLOCK_KHO_NODE_COMPATIBLE);
-	for (i = 0; i < reserved_mem_count; i++) {
-		struct reserve_mem_table *map = &reserved_mem_table[i];
-
-		err |= kho_preserve_phys(map->start, map->size);
-		err |= fdt_begin_node(fdt, map->name);
-		err |= fdt_property_string(fdt, "compatible", RESERVE_MEM_KHO_NODE_COMPATIBLE);
-		err |= fdt_property(fdt, "start", &map->start, sizeof(map->start));
-		err |= fdt_property(fdt, "size", &map->size, sizeof(map->size));
-		err |= fdt_end_node(fdt);
-	}
-	err |= fdt_end_node(fdt);
-	err |= fdt_finish(fdt);
-
-	err |= kho_preserve_folio(page_folio(fdt_page));
-	err |= kho_add_subtree(MEMBLOCK_KHO_FDT, fdt);
-
-	if (err) {
-		pr_err("failed to prepare memblock FDT for KHO: %d\n", err);
-		put_page(fdt_page);
-	}
-
-	return err;
+	return kho_preserve_phys(map->start, map->size);
 }
+
+struct kstate_description kstate_reserve_mem = {
+	.name = "reserved_mem",
+	.id = KSTATE_RESERVED_MEM_ID,
+	.fields = (const struct kstate_field[]) {
+		KSTATE_BASE_TYPE(name, struct reserve_mem_table,
+				char[RESERVE_MEM_NAME_SIZE]),
+		KSTATE_BASE_TYPE(start, struct reserve_mem_table, phys_addr_t),
+		KSTATE_BASE_TYPE(size, struct reserve_mem_table, phys_addr_t),
+		{
+			.name = "phys_range",
+			.flags = KS_CUSTOM,
+			.save = kstate_preserve_phys,
+		},
+		KSTATE_END_OF_LIST(),
+	},
+};
 
 static int __init reserve_mem_init(void)
 {
 	int err;
+	int i;
 
 	if (!kho_is_enabled() || !reserved_mem_count)
 		return 0;
 
-	err = prepare_kho_fdt();
-	if (err)
-		return err;
+	for (i = 0; i < reserved_mem_count; i++) {
+		struct reserve_mem_table *map = &reserved_mem_table[i];
+
+		err = kstate_register(&kstate_reserve_mem,
+				map, crc32(~0, map->name, RESERVE_MEM_NAME_SIZE));
+		if (err)
+			goto out;
+	}
+out:
 	return err;
 }
 late_initcall(reserve_mem_init);
 
-static void *__init reserve_mem_kho_retrieve_fdt(void)
-{
-	phys_addr_t fdt_phys;
-	static void *fdt;
-	int err;
-
-	if (fdt)
-		return fdt;
-
-	err = kho_retrieve_subtree(MEMBLOCK_KHO_FDT, &fdt_phys);
-	if (err) {
-		if (err != -ENOENT)
-			pr_warn("failed to retrieve FDT '%s' from KHO: %d\n",
-				MEMBLOCK_KHO_FDT, err);
-		return NULL;
-	}
-
-	fdt = phys_to_virt(fdt_phys);
-
-	err = fdt_node_check_compatible(fdt, 0, MEMBLOCK_KHO_NODE_COMPATIBLE);
-	if (err) {
-		pr_warn("FDT '%s' is incompatible with '%s': %d\n",
-			MEMBLOCK_KHO_FDT, MEMBLOCK_KHO_NODE_COMPATIBLE, err);
-		fdt = NULL;
-	}
-
-	return fdt;
-}
-
 static bool __init reserve_mem_kho_revive(const char *name, phys_addr_t size,
 					  phys_addr_t align)
 {
-	int err, len_start, len_size, offset;
-	const phys_addr_t *p_start, *p_size;
-	const void *fdt;
+	struct reserve_mem_table *map = &reserved_mem_table[reserved_mem_count];
 
-	fdt = reserve_mem_kho_retrieve_fdt();
-	if (!fdt)
+	if (kstate_restore(&kstate_reserve_mem, map,
+				crc32(~0, name, RESERVE_MEM_NAME_SIZE)))
 		return false;
 
-	offset = fdt_subnode_offset(fdt, 0, name);
-	if (offset < 0) {
-		pr_warn("FDT '%s' has no child '%s': %d\n",
-			MEMBLOCK_KHO_FDT, name, offset);
-		return false;
-	}
-	err = fdt_node_check_compatible(fdt, offset, RESERVE_MEM_KHO_NODE_COMPATIBLE);
-	if (err) {
-		pr_warn("Node '%s' is incompatible with '%s': %d\n",
-			name, RESERVE_MEM_KHO_NODE_COMPATIBLE, err);
+	if (map->start & (align - 1)) {
+		pr_warn("KHO reserve-mem '%s' has wrong alignment (0x%pa, 0x%pa)\n",
+			name, &align, &map->start);
 		return false;
 	}
 
-	p_start = fdt_getprop(fdt, offset, "start", &len_start);
-	p_size = fdt_getprop(fdt, offset, "size", &len_size);
-	if (!p_start || len_start != sizeof(*p_start) || !p_size ||
-	    len_size != sizeof(*p_size)) {
+	if (map->size != size) {
+		pr_warn("KHO reserve-mem '%s' has wrong size (0x%pa != 0x%pa)\n",
+			name, &map->size, &size);
 		return false;
 	}
 
-	if (*p_start & (align - 1)) {
-		pr_warn("KHO reserve-mem '%s' has wrong alignment (0x%lx, 0x%lx)\n",
-			name, (long)align, (long)*p_start);
-		return false;
-	}
-
-	if (*p_size != size) {
-		pr_warn("KHO reserve-mem '%s' has wrong size (0x%lx != 0x%lx)\n",
-			name, (long)*p_size, (long)size);
-		return false;
-	}
-
-	reserved_mem_add(*p_start, size, name);
-	pr_info("Revived memory reservation '%s' from KHO\n", name);
-
+	pr_info("Revived memory reservation '%s' %pa %pa from KHO\n",
+		name, &map->start, &map->size);
+	reserved_mem_count++;
 	return true;
 }
 #else
