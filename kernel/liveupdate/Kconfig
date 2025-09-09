@@ -69,6 +69,14 @@ config KSTATE
 	  state, save it into the memory and restore the state after kexec
 	  in new kernel.
 
+config KSTATE_TEST
+	bool "KSTATE test code"
+	help
+	  Build a simple test/playground code that is useful for kstate
+	  subsystem development. It contains some structure with different
+	  kind of data which migrated across kexec to the new kernel
+	  using KSTATE.
+
 config KEXEC_HANDOVER
 	bool "kexec handover"
 	depends on ARCH_SUPPORTS_KEXEC_HANDOVER && ARCH_SUPPORTS_KEXEC_FILE

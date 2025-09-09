@@ -13723,6 +13723,7 @@ M:	Andrey Ryabinin <ryabinin.a.a@gmail.com>
 S:	Maintained
 F:	include/linux/kstate.h
 F:	kernel/livupdate/kstate.c
+F:	lib/test_kstate.c
 
 KTD253 BACKLIGHT DRIVER
 M:	Linus Walleij <linus.walleij@linaro.org>
