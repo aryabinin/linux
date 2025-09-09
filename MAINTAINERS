@@ -13718,6 +13718,12 @@ F:	Documentation/admin-guide/auxdisplay/ks0108.rst
 F:	drivers/auxdisplay/ks0108.c
 F:	include/linux/ks0108.h
 
+KSTATE
+M:	Andrey Ryabinin <ryabinin.a.a@gmail.com>
+S:	Maintained
+F:	include/linux/kstate.h
+F:	kernel/livupdate/kstate.c
+
 KTD253 BACKLIGHT DRIVER
 M:	Linus Walleij <linus.walleij@linaro.org>
 S:	Maintained

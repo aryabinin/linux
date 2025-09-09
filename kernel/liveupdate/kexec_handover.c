@@ -12,6 +12,7 @@
 #include <linux/count_zeros.h>
 #include <linux/kexec.h>
 #include <linux/kexec_handover.h>
+#include <linux/kstate.h>
 #include <linux/libfdt.h>
 #include <linux/list.h>
 #include <linux/memblock.h>
@@ -885,6 +886,9 @@ int kho_finalize(void)
 		ret = -EEXIST;
 		goto unlock;
 	}
+	ret = kstate_finalize();
+	if (ret)
+		goto unlock;
 
 	ret = __kho_finalize();
 	if (ret)

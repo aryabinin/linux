@@ -62,12 +62,20 @@ config LIVEUPDATE_SELFTESTS
 	  If you are unsure or are building a production kernel where size
 	  or attack surface is a concern, say N.
 
+config KSTATE
+	bool
+	help
+	  KSTATE (kernel state) is a mechanism to describe internal kernel
+	  state, save it into the memory and restore the state after kexec
+	  in new kernel.
+
 config KEXEC_HANDOVER
 	bool "kexec handover"
 	depends on ARCH_SUPPORTS_KEXEC_HANDOVER && ARCH_SUPPORTS_KEXEC_FILE
 	depends on !DEFERRED_STRUCT_PAGE_INIT
 	select MEMBLOCK_KHO_SCRATCH
 	select KEXEC_FILE
+	select KSTATE
 	select DEBUG_FS
 	select LIBFDT
 	select CMA
