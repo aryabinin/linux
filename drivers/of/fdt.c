@@ -893,8 +893,8 @@ static void __init early_init_dt_check_kho(void)
 	if (l != (dt_root_addr_cells + dt_root_size_cells) * sizeof(__be32))
 		return;
 
-	fdt_start = dt_mem_next_cell(dt_root_addr_cells, &p);
-	fdt_size = dt_mem_next_cell(dt_root_addr_cells, &p);
+	kstate_start = dt_mem_next_cell(dt_root_addr_cells, &p);
+	kstate_size = dt_mem_next_cell(dt_root_addr_cells, &p);
 
 	p = of_get_flat_dt_prop(node, "linux,kho-scratch", &l);
 	if (l != (dt_root_addr_cells + dt_root_size_cells) * sizeof(__be32))
@@ -903,7 +903,7 @@ static void __init early_init_dt_check_kho(void)
 	scratch_start = dt_mem_next_cell(dt_root_addr_cells, &p);
 	scratch_size = dt_mem_next_cell(dt_root_addr_cells, &p);
 
-	kho_populate(fdt_start, fdt_size, scratch_start, scratch_size);
+	kho_populate(kstate_addr, kstate_size, scratch_start, scratch_size);
 }
 
 #ifdef CONFIG_SERIAL_EARLYCON

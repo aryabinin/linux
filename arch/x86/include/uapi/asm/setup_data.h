@@ -83,8 +83,8 @@ struct ima_setup_data {
  * Locations of kexec handover metadata
  */
 struct kho_data {
-	__u64 fdt_addr;
-	__u64 fdt_size;
+	__u64 kstate_addr;
+	__u64 kstate_size;
 	__u64 scratch_addr;
 	__u64 scratch_size;
 } __attribute__((packed));

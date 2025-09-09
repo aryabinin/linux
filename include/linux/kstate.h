@@ -94,6 +94,7 @@ struct kstate_field {
 
 enum kstate_ids {
 	KSTATE_FOLIO_ID = 1,
+	KSTATE_KHO_FDT_ID,
 	KSTATE_LAST_ID = -1,
 };
 

@@ -467,7 +467,8 @@ static void __init add_kho(u64 phys_addr, u32 data_len)
 		return;
 	}
 
-	kho_populate(kho->fdt_addr, kho->fdt_size, kho->scratch_addr, kho->scratch_size);
+	kho_populate(kho->kstate_addr, kho->kstate_size, kho->scratch_addr,
+		kho->scratch_size);
 
 	early_memunmap(kho, size);
 }

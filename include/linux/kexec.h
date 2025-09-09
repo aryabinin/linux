@@ -416,7 +416,7 @@ struct kimage {
 
 	struct {
 		struct kexec_segment *scratch;
-		phys_addr_t fdt;
+		phys_addr_t kstate;
 	} kho;
 
 	/* Core ELF header buffer */

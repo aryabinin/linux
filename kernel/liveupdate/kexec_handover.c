@@ -806,6 +806,10 @@ int kho_abort(void)
 		goto unlock;
 	}
 
+	ret = kstate_abort();
+	if (ret)
+		goto unlock;
+
 	ret = __kho_abort();
 	if (ret)
 		goto unlock;
@@ -984,6 +988,25 @@ int kho_retrieve_subtree(const char *name, phys_addr_t *phys)
 }
 EXPORT_SYMBOL_GPL(kho_retrieve_subtree);
 
+
+#define KHO_FDT_INSTANCE_ID 1
+
+static struct kho_fdt {
+	phys_addr_t fdt_phys;
+	u64 fdt_len;
+} kho_fdt;
+
+struct kstate_description kho_fdt_state = {
+	.name = "kho_fdt",
+	.version_id = 1,
+	.id = KSTATE_KHO_FDT_ID,
+	.fields = (const struct kstate_field[]) {
+		KSTATE_BASE_TYPE(fdt_phys, struct kho_fdt, phys_addr_t),
+		KSTATE_BASE_TYPE(fdt_len, struct kho_fdt, u64),
+		KSTATE_END_OF_LIST()
+	},
+};
+
 static __init int kho_init(void)
 {
 	int err = 0;
@@ -1000,13 +1023,20 @@ static __init int kho_init(void)
 	}
 	kho_out.fdt = page_to_virt(fdt_page);
 
-	err = kho_debugfs_init();
+	err = kstate_register(&kho_fdt_state, &kho_fdt, KHO_FDT_INSTANCE_ID);
 	if (err)
 		goto err_free_fdt;
 
+	kho_fdt.fdt_phys = page_to_phys(fdt_page);
+	kho_fdt.fdt_len = PAGE_SIZE;
+
+	err = kho_debugfs_init();
+	if (err)
+		goto err_free_kstate;
+
 	err = kho_out_debugfs_init(&kho_out.dbg);
 	if (err)
-		goto err_free_fdt;
+		goto err_free_kstate;
 
 	if (fdt) {
 		kho_in_debugfs_init(&kho_in.dbg, fdt);
@@ -1025,6 +1055,8 @@ static __init int kho_init(void)
 
 	return 0;
 
+err_free_kstate:
+	kstate_unregister(&kho_fdt_state, &kho_fdt, KHO_FDT_INSTANCE_ID);
 err_free_fdt:
 	put_page(fdt_page);
 	kho_out.fdt = NULL;
@@ -1165,24 +1197,30 @@ out:
 	return err;
 }
 
-void __init kho_populate(phys_addr_t fdt_phys, u64 fdt_len,
-			 phys_addr_t scratch_phys, u64 scratch_len)
+void __init kho_populate(phys_addr_t kstate_phys, u64 kstate_len,
+			phys_addr_t scratch_phys, u64 scratch_len)
 {
-
 	int err = 0;
-	unsigned int scratch_cnt = scratch_len / sizeof(*kho_scratch);
-
-	err = kho_fdt_init(fdt_phys, fdt_len);
-	if (err)
-		goto out;
 
 	err = kho_scratch_init(scratch_phys, scratch_len);
 	if (err)
 		goto out;
 
-	kho_in.fdt_phys = fdt_phys;
+	err = kstate_early_init(kstate_phys, kstate_len);
+	if (err)
+		goto out;
+
+	err = kstate_restore(&kho_fdt_state, &kho_fdt, KHO_FDT_INSTANCE_ID);
+	if (err)
+		goto out;
+
+	err = kho_fdt_init(kho_fdt.fdt_phys, kho_fdt.fdt_len);
+	if (err)
+		goto out;
+
+	kho_in.fdt_phys = kho_fdt.fdt_phys;
 	kho_in.scratch_phys = scratch_phys;
-	kho_scratch_cnt = scratch_cnt;
+	kho_scratch_cnt = scratch_len / sizeof(*kho_scratch);
 	pr_info("found kexec handover data. Will skip init for some devices\n");
 
 out:
@@ -1201,7 +1239,7 @@ int kho_fill_kimage(struct kimage *image)
 	if (!kho_enable)
 		return 0;
 
-	image->kho.fdt = virt_to_phys(kho_out.fdt);
+	image->kho.kstate = kstate_out_paddr;
 
 	scratch_size = sizeof(*kho_scratch) * kho_scratch_cnt;
 	scratch = (struct kexec_buf){
