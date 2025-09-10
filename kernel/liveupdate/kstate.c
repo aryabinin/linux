@@ -77,6 +77,7 @@ static int alloc_space(struct kstate_stream *stream, size_t size)
 	if (!new_folio)
 		return -ENOMEM;
 
+	stream->folio = new_folio;
 	stream->pos = folio_address(stream->folio) + cur_size;
 	return 0;
 }
